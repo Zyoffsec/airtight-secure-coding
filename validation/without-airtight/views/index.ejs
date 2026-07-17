@@ -1,0 +1,17 @@
+<%- include('partials/header') %>
+
+<section class="hero">
+  <h1>Добро пожаловать 👋</h1>
+  <% if (currentUser) { %>
+    <p>Вы вошли как <strong><%= currentUser.username %></strong>.</p>
+    <p><a class="btn" href="/profile">Открыть профиль</a></p>
+  <% } else { %>
+    <p>Простой пример аутентификации на Express: регистрация, вход и профиль.</p>
+    <p>
+      <a class="btn" href="/register">Создать аккаунт</a>
+      <a class="btn btn-ghost" href="/login">Войти</a>
+    </p>
+  <% } %>
+</section>
+
+<%- include('partials/footer') %>

@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><%= title %> · Airtight Auth</title>
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">🔐 Airtight Auth</a>
+    <nav>
+      <% if (currentUser) { %>
+        <a href="/profile">Профиль</a>
+        <form action="/logout" method="post" class="inline">
+          <button type="submit" class="link-btn">Выйти</button>
+        </form>
+      <% } else { %>
+        <a href="/login">Вход</a>
+        <a href="/register">Регистрация</a>
+      <% } %>
+    </nav>
+  </header>
+
+  <main class="container">
+    <% if (flash.error && flash.error.length) { %>
+      <div class="alert alert-error">
+        <% flash.error.forEach(function (msg) { %>
+          <div><%= msg %></div>
+        <% }); %>
+      </div>
+    <% } %>
+    <% if (flash.success && flash.success.length) { %>
+      <div class="alert alert-success">
+        <% flash.success.forEach(function (msg) { %>
+          <div><%= msg %></div>
+        <% }); %>
+      </div>
+    <% } %>

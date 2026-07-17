@@ -1,0 +1,12 @@
+node_modules/
+*.log
+
+# Secrets and local config — Gate 32: rule written before the file exists.
+.env
+!.env.example
+
+# Local SQLite databases
+data/
+*.sqlite
+*.sqlite3
+*.db

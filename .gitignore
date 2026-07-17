@@ -1,0 +1,54 @@
+# Secrets — never commit. See references/vectors/secrets.md, Gate 32.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+secrets.yml
+
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# Build and tooling
+dist/
+build/
+.cache/
+*.log
+
+# Demo assets — work files. Only the finished GIF is committed.
+demo/raw/
+*.cast
+*.mov
+*.mp4
+
+# Editors and OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Local agent config — never ships with the skill
+.claude/
+CLAUDE.md
+.backup-original-vectors/
+
+# Databases and local test data
+*.db
+*.sqlite
+*.sqlite-*
+data/
+catalog.db
+
+# Code graph tooling
+.code-review-graph/
+
+# Backup files from patches/merges
+*.orig

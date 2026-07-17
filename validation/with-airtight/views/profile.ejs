@@ -1,0 +1,31 @@
+<%- include("partials/header") %>
+  <div class="row">
+    <h1>Your profile</h1>
+    <form method="post" action="/logout" class="inline">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+      <button type="submit" class="link">Log out</button>
+    </form>
+  </div>
+
+  <% if (saved) { %>
+    <p class="alert ok">Profile saved.</p>
+  <% } %>
+  <% if (error) { %>
+    <p class="alert error"><%= error %></p>
+  <% } %>
+
+  <p class="muted">Signed in as <strong><%= user.email %></strong></p>
+
+  <form method="post" action="/profile">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+
+    <label for="displayName">Display name</label>
+    <input type="text" id="displayName" name="displayName" maxlength="80"
+           value="<%= user.display_name %>" />
+
+    <label for="bio">Bio</label>
+    <textarea id="bio" name="bio" rows="4" maxlength="500"><%= user.bio %></textarea>
+
+    <button type="submit">Save changes</button>
+  </form>
+<%- include("partials/footer") %>

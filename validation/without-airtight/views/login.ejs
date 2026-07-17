@@ -1,0 +1,22 @@
+<%- include('partials/header') %>
+
+<section class="card">
+  <h1>Вход</h1>
+  <form action="/login" method="post" novalidate>
+    <label>
+      Имя пользователя или email
+      <input type="text" name="identifier" value="<%= form.identifier || '' %>"
+             autocomplete="username" required autofocus />
+    </label>
+
+    <label>
+      Пароль
+      <input type="password" name="password" autocomplete="current-password" required />
+    </label>
+
+    <button type="submit" class="btn">Войти</button>
+  </form>
+  <p class="muted">Нет аккаунта? <a href="/register">Зарегистрироваться</a></p>
+</section>
+
+<%- include('partials/footer') %>
