@@ -1,4 +1,6 @@
-# Airtight
+<p align="center">
+  <img src="assets/banner.svg" alt="Airtight — secure-coding gates for AI-written code" width="100%">
+</p>
 
 **AI writes your code. Who checks it?**
 
@@ -139,140 +141,7 @@ that, and the limits below are real.
 Gates 120 and 121 appear twice: a missing rate limit is both an authentication failure and a missing
 design default, and the gate is the same either way. The categories overlap; the gates do not.
 
-### Credentials and authentication — gates 1-9
-
-| Gate | Condition |
-| --- | --- |
-| 1 | Login and reset responses are identical for an unknown account and a bad password |
-| 2 | Presented secrets are compared with a constant-time function |
-| 3 | Passwords are stored with bcrypt, argon2 or scrypt — not SHA-256, not plaintext |
-| 5 | A new session id is issued on login; the server-side record is destroyed on logout |
-| 6 | Session tokens, reset tokens, API keys and magic links come from a cryptographic random source |
-| 7 | Session cookies set `httpOnly`, `secure` and `sameSite` |
-| 8 | Reset and magic-link tokens expire and are marked used atomically on redemption |
-
-### Authorization and access control — gates 10-19
-
-| Gate | Condition |
-| --- | --- |
-| 10 | The acting user's identity comes from the server side, never from the request body |
-| 11 | Privileged routes check role or permission server-side, from server-side state |
-| 12 | Ownership is part of the lookup itself, not a check the client can skip past |
-| 13 | Record writes use an explicit field allowlist named literally in the source |
-| 15 | Tenant identifiers in queries derive from the session, not from the caller |
-
-### Injection — gates 20-29
-
-| Gate | Condition |
-| --- | --- |
-| 21 | Dynamic SQL identifiers — columns, tables, sort direction — map through an allowlist |
-| 22 | Every non-literal value in a SQL query is passed as a bound parameter |
-| 24 | Request values entering a document-store query are coerced to their expected scalar type |
-| 26 | OS commands are passed as an argument list with no shell |
-| 28 | Non-literal values reach template compilers and evaluators as data, never as source |
-
-### Configuration and secrets — gates 30-39
-
-| Gate | Condition |
-| --- | --- |
-| 30 | No credential written as a literal in the source |
-| 31 | A secret read from the environment has no fallback default except raise or exit |
-| 32 | A file holding real secrets is not created without a `.gitignore` rule matching it |
-| 33 | Removing a committed secret is not remediation without revoking and reissuing it |
-| 35 | Browser code holds no credential except the ones a service publishes for client use |
-| 37 | Error handlers do not return an exception's message, stack or repr to the client |
-
-### Input validation — gates 40-49
-
-| Gate | Condition |
-| --- | --- |
-| 40 | Requests are parsed server-side by a schema naming every accepted field and its type |
-| 41 | Monetary amounts are computed server-side from stored values, never read from the request |
-| 43 | The value passed downstream is the validator's output, and failure returns before use |
-| 44 | Upload type is decided from the file's bytes server-side, not its name or declared type |
-| 45 | Upload size is capped by the framework before the file is buffered |
-| 46 | Uploads are written under a server-generated filename outside any static-served directory |
-
-### Cross-site scripting — gates 50-59
-
-| Gate | Condition |
-| --- | --- |
-| 50 | Supplied HTML reaching a raw-HTML sink goes through a maintained sanitizer library |
-| 51 | Markup is not assembled by interpolating non-literal values into an HTML string |
-| 53 | A URL from data reaching `href`, `src` or `location` is parsed and its scheme allowlisted |
-| 55 | Data embedded in a `<script>` element is serialized by a helper that escapes `<` |
-
-### Cryptographic failures — gates 60-69
-
-| Gate | Condition |
-| --- | --- |
-| 60 | TLS certificate and hostname verification is never disabled outside a test asserting rejection |
-| 61 | Values whose safety depends on unpredictability come from a CSPRNG, not `Math.random()` |
-| 63 | Encryption uses an AEAD construction with a nonce that is never reused under one key |
-| 65 | Encoding is not treated as protection — base64 and hex are not confidentiality or integrity |
-
-### Server-side request forgery — gates 70-79
-
-| Gate | Condition |
-| --- | --- |
-| 70 | A request-supplied URL is constrained against an allowlist before the request is made |
-| 71 | Redirects on a fetched URL are disabled at the call site, or each hop is re-checked |
-| 74 | A stored callback or webhook destination is re-constrained at the moment it is used |
-| 76 | Document renderers and parsers deny outbound requests by default |
-
-### Security misconfiguration — gates 80-89
-
-| Gate | Condition |
-| --- | --- |
-| 80 | Allowed CORS origins are literal strings in the source, not a reflected request origin |
-| 81 | Deployed configuration has debug off and the environment set explicitly to production |
-| 83 | Accounts and database roles are not created with a password written as a literal |
-| 85 | Datastores, caches, brokers and admin UIs do not publish a port on all interfaces |
-| 87 | A generated file holding a secret is created with mode `0600` |
-
-### Software and data integrity failures — gates 90-99
-
-| Gate | Condition |
-| --- | --- |
-| 90 | Bytes that crossed a trust boundary are parsed by a data-only format — never `pickle` |
-| 91 | Third-party scripts carry an `integrity` digest and `crossorigin`, or are vendored |
-| 93 | Code fetched over the network is not piped straight into a shell or an evaluator |
-| 95 | Auto-update packages and downloaded plugins have their signature verified before loading |
-| 96 | A webhook signature is verified against the raw body before the handler reads the payload |
-
-### Security logging and monitoring failures — gates 100-109
-
-| Gate | Condition |
-| --- | --- |
-| 100 | Log records are built from an explicit field list — not `req.body`, not `req.headers` |
-| 101 | A `catch` block either records the error or rethrows it; it never swallows it |
-| 103 | Authentication, password, role and admin actions are recorded as security events |
-| 107 | At least one log destination writes to stdout or stderr unconditionally |
-
-### Vulnerable and outdated components — gates 110-119
-
-| Gate | Condition |
-| --- | --- |
-| 110 | Install commands honour a committed lockfile and fail when it is missing or disagrees |
-| 112 | No dependency is specified as `latest`, `*`, an empty range, or no version at all |
-| 114 | Git and archive dependencies are pinned to a commit SHA or a published checksum |
-| 115 | A package name comes from the manifest, the developer, or documentation — never invented |
-| 117 | A CI workflow that installs dependencies also runs an audit step that can fail the job |
-| 118 | An audit step is not silenced without resolving the finding or recording a named exception |
-
-### Insecure design — gates 120-129
-
-| Gate | Condition |
-| --- | --- |
-| 120 | Routes that verify or issue a credential have a rate limiter applied |
-| 121 | Failed credential attempts are counted per account and further attempts refused or delayed |
-| 123 | A list endpoint's result set is bounded by a maximum written literally in the source |
-| 125 | A request value that sizes work, memory or output is clamped to a literal maximum |
-| 127 | Archive extraction and decompression carry expanded-byte and entry-count limits |
-| 128 | A quantity or multiplier from a request is constrained to a literal integer range |
-
-Ranges 130+ are unclaimed. A new topic is a new file and a new range — see
-[CONTRIBUTING.md](CONTRIBUTING.md).
+**All 67 gates with their exact conditions are in [`references/gates.md`](references/gates.md).**
 
 ## What it does NOT catch
 

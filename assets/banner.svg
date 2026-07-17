@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 360" width="1280" height="360" role="img" aria-label="Airtight — secure-coding gates for AI-written code">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0.35" y2="1">
+      <stop offset="0" stop-color="#11151d"/>
+      <stop offset="1" stop-color="#0a0d13"/>
+    </linearGradient>
+  </defs>
+  <rect width="1280" height="360" fill="url(#bg)"/>
+  <rect x="0" y="0" width="6" height="360" fill="#56c7d6"/>
+  <rect x="0" y="0" width="1280" height="1" fill="#56c7d6" opacity="0.22"/>
+
+  <!-- wordmark -->
+  <text x="96" y="152" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="98" font-weight="700" fill="#eef3f7" letter-spacing="-2">airtight</text>
+  <rect x="100" y="184" width="130" height="4" rx="2" fill="#56c7d6"/>
+  <text x="100" y="238" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="30" fill="#9aa7b4">Secure-coding gates for AI-written code</text>
+  <text x="100" y="296" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="17" font-weight="600" fill="#56c7d6" letter-spacing="3">67 GATES · 13 TOPICS · OWASP + CWE MAPPED</text>
+
+  <!-- right motif: the part nobody asked for -->
+  <text x="822" y="92" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" fill="#5a6672" letter-spacing="2.5">THE PART NOBODY ASKED FOR</text>
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="19">
+    <text x="822" y="134" fill="#5a6672">Gate 120  rate limit</text>
+    <text x="1120" y="134" fill="#56c7d6">sealed</text>
+    <text x="822" y="176" fill="#5a6672">Gate 121  lockout</text>
+    <text x="1120" y="176" fill="#56c7d6">sealed</text>
+    <text x="822" y="218" fill="#5a6672">Gate 103  audit log</text>
+    <text x="1120" y="218" fill="#56c7d6">sealed</text>
+  </g>
+  <rect x="822" y="238" width="358" height="1" fill="#232a34"/>
+  <text x="822" y="266" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="15" fill="#5a6672">The code wasn't bad. It was incomplete.</text>
+</svg>
