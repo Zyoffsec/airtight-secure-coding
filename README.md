@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/banner.svg" alt="Airtight — secure-coding gates for AI-written code" width="100%">
+  <img src="assets/banner.jpg" alt="Airtight — secure-coding gates for AI-written code" width="100%">
 </p>
 
 **AI writes your code. Who checks it?**
