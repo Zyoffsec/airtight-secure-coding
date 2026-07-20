@@ -62,7 +62,15 @@ comment and refusal, so the developer can look up exactly what was enforced.
 
 **Default (no verb).** This is the common case. The developer wants a feature; they get one that
 passes the gates. Do not announce Airtight. Do not append a security summary to ordinary code. The
-gates are a constraint on your output, not a topic of conversation.
+gates are a constraint on your output, not a topic of conversation. **Do not install packages, start a
+server, or run smoke tests / curl checks to verify** — emitting gate-passing code is the whole job.
+Exercising a running endpoint is what `prove` is for, and only when the developer asks.
+
+**Work silently — do not narrate the security process.** No "this is an auth flow, let me load the
+gates", no listing which files you read for security, no announcing that Airtight is involved — just
+produce the hardened code. If the code was security-relevant, you may close with **one** short, plain
+note of what you hardened and what you did not check; that honest scope line is the point and worth
+keeping. For non-security code, say nothing at all.
 
 **audit.** Read-only, always. Never edit during an audit — the developer asked what is wrong, not for
 it to change under them. Output: ranked punch list, worst first.
@@ -91,21 +99,26 @@ optional.
 
 ## Pre-emit self-check
 
-Run this **before** returning code. It is the whole mechanic; skipping it makes Airtight the passive
-markdown it was built to replace.
+Run this **before** returning code — but scale it to what the code actually touches. Skipping it on
+security-relevant code makes Airtight the passive markdown it replaces; running the full pass on
+trivial code just burns time and tokens for nothing.
 
-1. **Identify surfaces.** What does this code touch — credentials, authorization, a query, config,
-   external input? Map each to a gate range (see below).
-2. **Apply the registry.** `references/gates.md` carries every gate's rule and fix, one line each — it
-   is the complete working checklist. Score against it directly. Do **not** load topic vector files in
-   normal operation; the registry is enough.
-3. **Score.** For each applicable gate: pass or fail. Not "probably fine". If you cannot tell, it
-   fails — you do not know that it passes.
-4. **Revise.** Rewrite anything that fails and re-score it. Failing code is not emitted.
-5. **Emit.** Silently, under the default verb. No scorecard unless a verb asked for one.
+1. **Triage first — cheap, every time.** Does this code touch a security surface: credentials/auth, an
+   authorization or ownership decision, a query / shell / template, config or secrets, external or
+   untrusted input, a file upload, cryptography, or a security-relevant log? **If it touches none** —
+   UI, styling, copy, layout, a rename, a non-security refactor, wiring with no untrusted data —
+   **emit normally and stop. Run no gates.** This is the common case; the check below is not for it.
+2. **Scope to the surfaces present.** For a surface that IS touched, take **only its gate range** from
+   the table below — never sweep all 67. `references/gates.md` has every gate's rule and fix in one
+   line; apply the in-scope ones directly. **Do not load topic vector files** — the registry is enough
+   to emit.
+3. **Score internally, terse.** For each in-scope gate: pass or fail. If you cannot tell, it fails.
+   Keep it in your head — do **not** write out a per-gate scorecard. The output is code, not a report.
+4. **Revise.** Rewrite what fails and re-check just that. Failing code is not emitted.
+5. **Emit.** Silently. One short line at most, only if a gate forced a choice.
 
-Applies to code you write, code you edit, and code you paste from elsewhere. A gate failure you
-inherited is still a gate failure you are shipping.
+Applies to code you write, edit, or paste — but only within a surface that triage flagged. A gate
+failure you inherited there is still one you are shipping.
 
 If a gate cannot be satisfied — the framework has no parameterized query API, the developer has
 explicitly required the unsafe path — do not emit it quietly. Emit with a one-line note naming the
@@ -114,8 +127,10 @@ gate and the exposure. The developer may override a gate. You may not override i
 ## Topic files — optional deep dives
 
 The registry (`references/gates.md`) is the working checklist and already covers every gate. The
-per-topic files below hold longer background for one topic each. You do **not** need them for normal
-work — reach for one only when a specific gate needs a deeper look, and load **at most one**.
+per-topic files below hold longer background for one topic each. **Never load them while writing or
+editing code** — the registry is always enough to emit, and pulling a vector file can balloon context
+by thousands of tokens. They are reference only: for a human reading the repo, or when the developer
+explicitly asks to go deep on one topic. Even then, load **at most one**.
 
 | Trigger in the code or request | Load |
 | --- | --- |
@@ -133,10 +148,9 @@ work — reach for one only when a specific gate needs a deeper look, and load *
 | Manifests, lockfiles, install commands, CI audit steps, naming a package | `references/vectors/dependencies.md` |
 | Rate limits, pagination, request-sized work, archive extraction, quantities | `references/vectors/design.md` |
 
-**Default: load none.** For ordinary work, apply the registry and emit — the one-line rules and fixes
-are enough. Only when a specific gate genuinely needs deeper context, load that **single** topic file,
-then stop. Never load more than one topic file at a time, and prefer loading none when the registry
-answers the question.
+**Default during generation: load none, ever.** Writing and editing code use the registry and nothing
+else — the one-line rules and fixes are enough. Reach for a topic file only for an explicit deep-dive
+the developer asked for, never as part of emitting code; even then load one and stop. Prefer none.
 
 Always applied:
 - `references/gates.md` — the complete gate registry: every gate's rule and fix, one line each. This is
