@@ -1,5 +1,17 @@
 <p align="center">
-  <img src="assets/banner.jpg" alt="Airtight — secure-coding gates for AI-written code" width="100%">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/airtight-logo-dark.png">
+    <img src="assets/airtight-logo-light.png" alt="airtight — secure-coding gates for AI-written code" width="540">
+  </picture>
+</p>
+
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-3a9d3a" alt="MIT"></a>
+  <img src="https://img.shields.io/badge/works%20with-Claude%20Code%20%7C%20Cursor%20%7C%20Codex-2f6db0" alt="works with Claude Code, Cursor, Codex">
+  <img src="https://img.shields.io/badge/checks-67%20across%2013%20topics-3E6FA8" alt="67 checks across 13 topics">
+  <img src="https://img.shields.io/badge/mapped-OWASP%20Top%2010%20%2B%20CWE-b5502f" alt="mapped to OWASP Top 10 + CWE">
+  <a href="https://github.com/Zyoffsec/airtight-secure-coding/stargazers"><img src="https://img.shields.io/github/stars/Zyoffsec/airtight-secure-coding?color=414651" alt="GitHub stars"></a>
+  <a href="https://www.linkedin.com/in/ashot-mxitaryan/"><img src="https://img.shields.io/badge/LinkedIn-Ashot%20Mxitaryan-0A66C2?logo=linkedin&logoColor=white" alt="LinkedIn"></a>
 </p>
 
 **AI writes your code. Who checks it?**
