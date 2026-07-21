@@ -81,7 +81,25 @@ Python reach for `cryptography`'s `Fernet` or `AESGCM` rather than composing it 
 comes from the environment, never a literal in source (Gate 30 in `secrets.md`); a fallback default
 for a missing key is Gate 31.
 
-`(example omitted)`
+```js
+import crypto from "node:crypto";
+
+const key = Buffer.from(process.env.FIELD_KEY, "hex");
+
+export function encryptField(plaintext) {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+  const ct = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
+  return Buffer.concat([iv, cipher.getAuthTag(), ct]).toString("base64");
+}
+
+export function decryptField(stored) {
+  const buf = Buffer.from(stored, "base64");
+  const decipher = crypto.createDecipheriv("aes-256-gcm", key, buf.subarray(0, 12));
+  decipher.setAuthTag(buf.subarray(12, 28));
+  return Buffer.concat([decipher.update(buf.subarray(28)), decipher.final()]).toString("utf8");
+}
+```
 
 **Fails:** `aes-256-cbc` with a constant/zero IV (`Buffer.alloc(16, 0)`), or `aes-256-ecb` /
 `AES.new(key, AES.MODE_ECB)` — a fixed IV makes encryption deterministic (equal plaintexts yield
@@ -104,7 +122,28 @@ the base64 — it is the right tool for fitting bytes into a URL; it is simply n
 link trustworthy. Where the value must also be unreadable, that is encryption (Gate 63); where it
 need not travel at all, store a random token and look it up (Gate 6).
 
-`(example omitted)`
+```js
+import { createHmac, timingSafeEqual } from "node:crypto";
+
+const sign = (email) =>
+  createHmac("sha256", process.env.UNSUBSCRIBE_KEY).update(email).digest("base64url");
+
+export function unsubscribeUrl(email) {
+  const u = Buffer.from(email).toString("base64url");
+  return `${process.env.APP_URL}/unsubscribe?u=${u}&s=${sign(email)}`;
+}
+
+app.get("/unsubscribe", async (req, res) => {
+  const email = Buffer.from(String(req.query.u ?? ""), "base64url").toString("utf8");
+  const expected = Buffer.from(sign(email));
+  const presented = Buffer.from(String(req.query.s ?? ""));
+  if (expected.length !== presented.length || !timingSafeEqual(expected, presented)) {
+    return res.status(400).send("Invalid unsubscribe link");
+  }
+  await db.subscriber.update({ where: { email }, data: { subscribed: false } });
+  res.send("You have been unsubscribed.");
+});
+```
 
 **Fails:** base64-encoding an address into `?u=` with no MAC — base64 takes no key, so anyone can
 decode it and, worse, re-encode any other address and act as them.

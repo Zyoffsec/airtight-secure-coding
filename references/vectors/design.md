@@ -47,10 +47,35 @@ bound. The right bound depends on the product, and Airtight does not know the pr
 **Applies when:** a route handles login, signup, password-reset, OTP, magic-link, token refresh, or any exchange where the caller presents or requests a secret.
 
 **Passes:**
-`(example omitted)`
+```js
+import rateLimit from "express-rate-limit";
+
+const credentialLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+app.post("/login", credentialLimiter, async (req, res) => {
+  const { email, password } = req.body;
+  const user = await db.user.findUnique({ where: { email } });
+  const ok = user && (await argon2.verify(user.passwordHash, password));
+  if (!ok) return res.status(401).json({ error: "Invalid email or password" });
+  return startSession(req, res, user);
+});
+```
 
 **Fails:**
-`(example omitted)`
+```js
+app.post("/login", async (req, res) => {
+  const { email, password } = req.body;
+  const user = await db.user.findUnique({ where: { email } });
+  const ok = user && (await argon2.verify(user.passwordHash, password));
+  if (!ok) return res.status(401).json({ error: "Invalid email or password" });
+  return startSession(req, res, user);
+});
+```
 
 **Why:** The failing handler passes every other credentials gate yet hands the caller unlimited guesses at line rate — a password list runs in minutes, and on reset/OTP routes each unthrottled request is a real mailer or SMS bill.
 
@@ -66,10 +91,38 @@ bound. The right bound depends on the product, and Airtight does not know the pr
 credential did not match.
 
 **Passes:**
-`(example omitted)`
+```js
+app.post("/login", credentialLimiter, async (req, res) => {
+  const { email, password } = req.body;
+  const user = await db.user.findUnique({ where: { email } });
+  const locked = Boolean(user?.lockedUntil && user.lockedUntil > new Date());
+  const ok = !locked && user && (await argon2.verify(user.passwordHash, password));
+  if (!ok) {
+    if (user && !locked) {
+      const n = user.failedAttempts + 1;
+      const backoffMs = n < 5 ? 0 : Math.min(2 ** (n - 5) * 1000, 15 * 60 * 1000);
+      await db.user.update({
+        where: { id: user.id },
+        data: { failedAttempts: n, lockedUntil: new Date(Date.now() + backoffMs) },
+      });
+    }
+    return res.status(401).json({ error: "Invalid email or password" });
+  }
+  await db.user.update({ where: { id: user.id }, data: { failedAttempts: 0, lockedUntil: null } });
+  return startSession(req, res, user);
+});
+```
 
 **Fails:**
-`(example omitted)`
+```js
+app.post("/login", credentialLimiter, async (req, res) => {
+  const { email, password } = req.body;
+  const user = await db.user.findUnique({ where: { email } });
+  const ok = user && (await argon2.verify(user.passwordHash, password));
+  if (!ok) return res.status(401).json({ error: "Invalid email or password" });
+  return startSession(req, res, user);
+});
+```
 
 **Why:** Per-IP limiting (Gate 120) does nothing against credential stuffing, where one guess hits each of many accounts from a rotating IP pool — the counter must hang off the account the attacker cannot rotate.
 
@@ -88,10 +141,35 @@ signal that the guessing is working.
 **Applies when:** any handler queries a collection and returns rows — even a small or already-paginated one.
 
 **Passes:**
-`(example omitted)`
+```ts
+const MAX_PAGE = 100;
+
+app.get("/api/posts", async (req, res) => {
+  const requested = Number(req.query.limit);
+  const limit = Number.isInteger(requested) ? Math.min(Math.max(requested, 1), MAX_PAGE) : 20;
+  const offset = Math.max(Number(req.query.offset) || 0, 0);
+  const posts = await db.post.findMany({
+    take: limit,
+    skip: offset,
+    orderBy: { createdAt: "desc" },
+  });
+  res.json(posts);
+});
+```
 
 **Fails:**
-`(example omitted)`
+```ts
+app.get("/api/posts", async (req, res) => {
+  const limit = Number(req.query.limit) || 20;
+  const offset = Number(req.query.offset) || 0;
+  const posts = await db.post.findMany({
+    take: limit,
+    skip: offset,
+    orderBy: { createdAt: "desc" },
+  });
+  res.json(posts);
+});
+```
 
 **Why:** `?limit=1000000` is a one-request denial of service — the DB scans, the driver materializes, and the event loop stalls for everyone. The failing version reads as finished because it *is* the pagination idiom, and behaves identically on a small dev table.
 
@@ -106,10 +184,35 @@ signal that the guessing is working.
 **Applies when:** a request value reaches an image dimension, page count, iteration count, scale/quality factor, batch size, date span, or "generate N" parameter — resize, PDF/report generation, CSV export, chart rendering, bulk fetch.
 
 **Passes:**
-`(example omitted)`
+```ts
+const MAX_DIM = 2048;
+
+function dim(value: unknown, fallback: number): number {
+  const n = Number(value);
+  return Number.isInteger(n) && n > 0 ? Math.min(n, MAX_DIM) : fallback;
+}
+
+app.get("/api/avatar/:id", async (req, res) => {
+  const src = await storage.get(`avatars/${req.params.id}`);
+  const out = await sharp(src)
+    .resize(dim(req.query.w, 256), dim(req.query.h, 256))
+    .jpeg()
+    .toBuffer();
+  res.type("jpeg").send(out);
+});
+```
 
 **Fails:**
-`(example omitted)`
+```ts
+app.get("/api/avatar/:id", async (req, res) => {
+  const src = await storage.get(`avatars/${req.params.id}`);
+  const out = await sharp(src)
+    .resize(Number(req.query.w), Number(req.query.h))
+    .jpeg()
+    .toBuffer();
+  res.type("jpeg").send(out);
+});
+```
 
 **Why:** `?w=30000&h=30000` asks for a 900-megapixel surface (3.6 GB) and never returns. Gate 45's upload cap bounds input bytes, not output size; Gate 40's schema confirms `w` is a number, which `30000` is. The failing version is the feature exactly as requested.
 
@@ -125,7 +228,14 @@ signal that the guessing is working.
 small caller-supplied input into a larger caller-chosen output — `extractall` being the default.
 
 **Fails:**
-`(example omitted)`
+```python
+@app.post("/import")
+async def import_archive(file: UploadFile = File(...)):
+    dest = tempfile.mkdtemp()
+    with zipfile.ZipFile(io.BytesIO(await file.read())) as zf:
+        zf.extractall(dest)
+    return {"files": os.listdir(dest)}
+```
 
 **Why:** A zip bomb is a few hundred KB that expands to gigabytes, so it clears the upload cap (Gate 45); `extractall` streams with no running total until the disk fills or OOM. Checking `info.file_size` fails too — that field lives inside the archive and is author-controlled; only bytes you actually wrote are trustworthy.
 
@@ -143,10 +253,49 @@ against a budget, never `zlib.decompress(body)`. Where the filenames go is Gate 
 **Applies when:** a non-monetary magnitude (`quantity`, `qty`, `count`, `seats`, `days`, `points`) arrives in a request and is multiplied by, added to or subtracted from a stored value.
 
 **Passes:**
-`(example omitted)`
+```ts
+const CheckoutSchema = z.object({
+  items: z
+    .array(
+      z.object({
+        productId: z.string().uuid(),
+        quantity: z.number().int().min(1).max(100),
+      }),
+    )
+    .min(1)
+    .max(50),
+});
+
+app.post("/api/checkout", requireAuth, async (req, res) => {
+  const { items } = CheckoutSchema.parse(req.body);
+  const products = await db.product.findMany({ where: { id: { in: items.map(i => i.productId) } } });
+  const total = items.reduce(
+    (sum, i) => sum + products.find(p => p.id === i.productId)!.priceCents * i.quantity, 0);
+  const intent = await stripe.paymentIntents.create({ amount: total, currency: "usd" });
+  res.json({ clientSecret: intent.client_secret });
+});
+```
 
 **Fails:**
-`(example omitted)`
+```ts
+const CheckoutSchema = z.object({
+  items: z.array(
+    z.object({
+      productId: z.string().uuid(),
+      quantity: z.number().int(),
+    }),
+  ),
+});
+
+app.post("/api/checkout", requireAuth, async (req, res) => {
+  const { items } = CheckoutSchema.parse(req.body);
+  const products = await db.product.findMany({ where: { id: { in: items.map(i => i.productId) } } });
+  const total = items.reduce(
+    (sum, i) => sum + products.find(p => p.id === i.productId)!.priceCents * i.quantity, 0);
+  const intent = await stripe.paymentIntents.create({ amount: total, currency: "usd" });
+  res.json({ clientSecret: intent.client_secret });
+});
+```
 
 **Why:** `quantity: -1` is a valid integer that subtracts a product's price from the cart; `quantity: 1e9` overflows the total or stock ledger. Server-side pricing and schema parsing don't help — the type was validated but the range wasn't.
 

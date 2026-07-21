@@ -36,10 +36,20 @@ record, and org-scoped queries that trust the org id in the path.
 **Applies when:** a handler needs to know who is calling.
 
 **Passes:**
-`(example omitted)`
+```ts
+app.get("/api/orders", requireAuth, async (req, res) => {
+  const orders = await db.order.findMany({ where: { userId: req.session.userId } });
+  res.json(orders);
+});
+```
 
 **Fails:**
-`(example omitted)`
+```ts
+app.get("/api/orders", requireAuth, async (req, res) => {
+  const orders = await db.order.findMany({ where: { userId: req.query.userId as string } });
+  res.json(orders);
+});
+```
 
 **Why:** The client-supplied id lets an attacker send someone else's: `GET /api/orders?userId=42` returns another user's data, and `requireAuth` proves nothing beyond having an account.
 
@@ -88,10 +98,24 @@ a non-owner gets zero rows rather than a record plus a check that a later refact
 spread, or `Object.assign(record, req.body)`.
 
 **Passes:**
-`(example omitted)`
+```python
+class ProfileUpdate(BaseModel):
+    display_name: str | None = None
+    bio: str | None = None
+
+@app.patch("/api/users/me")
+def update_profile(payload: ProfileUpdate, user=Depends(current_user)):
+    db.users.update_one({"_id": user.id}, {"$set": payload.model_dump(exclude_unset=True)})
+    return {"ok": True}
+```
 
 **Fails:**
-`(example omitted)`
+```python
+@app.patch("/api/users/me")
+def update_profile(payload: dict, user=Depends(current_user)):
+    db.users.update_one({"_id": user.id}, {"$set": payload})
+    return {"ok": True}
+```
 
 **Why:** Even correctly scoped to the caller's own record (Gate 12), a raw-body write grants admin to anyone who sends `{"role": "admin"}` to their own profile endpoint.
 
@@ -110,7 +134,11 @@ under Gate 11, not by a profile update.
 route path contains a tenant segment such as `/orgs/:orgId/...`.
 
 **Fails:**
-`(example omitted)`
+```ts
+app.get("/api/orgs/:orgId/projects", requireAuth, async (req, res) => {
+  res.json(await db.project.findMany({ where: { orgId: req.params.orgId } }));
+});
+```
 
 **Why:** The query is scoped by `orgId`, but the caller picks it — any authenticated user swaps the path id and reads another customer's projects.
 

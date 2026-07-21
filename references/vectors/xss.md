@@ -30,7 +30,15 @@ that protection: raw-HTML sinks, HTML built by interpolation, URL attributes, an
 Applies when user-supplied markup (markdown, rich-text, `body_html`) reaches any string-to-HTML sink.
 
 Fix: sanitize at the sink, as the last expression before the value enters it.
-`(example omitted)`
+```jsx
+import DOMPurify from "dompurify";
+import { marked } from "marked";
+
+export function PostBody({ markdown }) {
+  const clean = DOMPurify.sanitize(marked.parse(markdown));
+  return <div className="post" dangerouslySetInnerHTML={{ __html: clean }} />;
+}
+```
 
 Sanitize at the sink, not on write: sanitized-on-write columns are trusted forever and never see sanitizer upgrades. A hand-rolled regex strip is not a sanitizer — the HTML parser decides what runs and accepts `<script/src=x>`, `<img onerror>`, `<svg onload>`.
 
@@ -42,7 +50,17 @@ Sanitize at the sink, not on write: sanitized-on-write columns are trusted forev
 Applies when markup is literal in source and a datum is placed inside it via template literal, `+`, `.join("")` or f-string reaching a raw sink.
 
 Fix: do not build the HTML. Set `textContent`, return a JSX child (`<li>{item.title}</li>`), or use a template placeholder; in Python, `format_html("<b>{}</b>", user.name)` escapes the argument.
-`(example omitted)`
+```js
+function renderResults(items) {
+  resultsEl.replaceChildren(
+    ...items.map((item) => {
+      const li = document.createElement("li");
+      li.textContent = item.title;
+      return li;
+    }),
+  );
+}
+```
 Fails: `innerHTML = items.map((i) => `<li>${i.title}</li>`).join("")`; or `mark_safe(f"<b>{user.name}</b>")`. A sanitizer is the wrong answer — nothing in `item.title` was ever meant to be HTML.
 
 ### Gate 53 — URL scheme allowlist
@@ -54,7 +72,24 @@ Fails: `innerHTML = items.map((i) => `<li>${i.title}</li>`).join("")`; or `mark_
 Applies to any link, image, iframe, form target or redirect destination built from untrusted input.
 
 Fix: parse with `new URL(raw)` and test `url.protocol` against a literal `Set`, then use `url.href`.
-`(example omitted)`
+```jsx
+const SAFE_PROTOCOLS = new Set(["http:", "https:"]);
+
+function safeHref(raw) {
+  try {
+    const url = new URL(raw);
+    return SAFE_PROTOCOLS.has(url.protocol) ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
+export function ProfileLink({ user }) {
+  const href = safeHref(user.website);
+  if (!href) return <span>{user.website}</span>;
+  return <a href={href} rel="noreferrer">{user.website}</a>;
+}
+```
 Fails: `<a href={user.website}>` directly — auto-escaping does not cover URLs, and a prefix check fails to `JaVaScRiPt:` or ` javascript:` because `new URL()` normalizes case, whitespace and control chars the way the browser does.
 
 ### Gate 55 — Data in a script context

@@ -22,7 +22,22 @@ Asked for "a login form," a model emits a plausible one: password stored as a SH
 
 Fix: hash unconditionally. Compute one throwaway hash at startup with the same parameters as real ones, verify against it when the lookup misses, and collapse both outcomes into one 401 with one body. For reset requests, always answer "if that address has an account, a link has been sent" — after the same work either way.
 
-`(example omitted)`
+```js
+// A throwaway hash, computed once at startup with the same parameters as real ones.
+const DUMMY_HASH = await argon2.hash(crypto.randomBytes(32).toString("hex"));
+
+app.post("/login", async (req, res) => {
+  const { email, password } = req.body;
+  const user = await db.user.findUnique({ where: { email } });
+
+  // Verify unconditionally — against the real hash, or the throwaway one when the
+  // account does not exist — so both paths cost the same.
+  const verified = await argon2.verify(user ? user.passwordHash : DUMMY_HASH, password);
+
+  if (!user || !verified) return res.status(401).json({ error: "Invalid email or password" });
+  return startSession(req, res, user);
+});
+```
 
 Fails: `user && (await argon2.verify(...))` — the `&&` short-circuits, so an unknown email skips the KDF and returns in microseconds while a real account pays full cost, leaking a membership oracle by timing. Also fails: an early status branch (404 for unknown, 401 for wrong password). A uniform error message alone is only half the fix.
 
@@ -34,7 +49,15 @@ Fails: `user && (await argon2.verify(...))` — the `&&` short-circuits, so an u
 
 Fix: compare with `crypto.timingSafeEqual` on equal-length buffers (Python: `hmac.compare_digest`). For passwords, do not compare at all — call the hashing library's verify, which is constant-time by construction (Gate 3).
 
-`(example omitted)`
+```js
+import { timingSafeEqual } from "node:crypto";
+
+function keyMatches(presented, expected) {
+  const a = Buffer.from(presented);
+  const b = Buffer.from(expected);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+```
 
 Fails: `presented === expected`. `===` returns at the first differing byte, so its duration leaks how much of the guess was right.
 
@@ -46,7 +69,17 @@ Fails: `presented === expected`. `===` returns at the first differing byte, so i
 
 Fix: hash with argon2id (`argon2-cffi`), or bcrypt where argon2 is unavailable. Store the library's full encoded output — it carries the salt and parameters — and verify with the library's own verify function, never by re-hashing and comparing strings.
 
-`(example omitted)`
+```python
+from argon2 import PasswordHasher
+
+ph = PasswordHasher()
+
+def register(email: str, password: str) -> None:
+    db.execute(
+        "INSERT INTO users (email, password_hash) VALUES (?, ?)",
+        (email, ph.hash(password)),
+    )
+```
 
 Fails: `hashlib.sha256(password.encode()).hexdigest()`. Fast, general-purpose hashes (SHA-256, MD5, unsalted) are cracked at enormous rates offline; password KDFs are deliberately slow and per-password salted.
 
@@ -58,7 +91,18 @@ Fails: `hashlib.sha256(password.encode()).hexdigest()`. Fast, general-purpose ha
 
 Fix: call the session store's regenerate on successful login and its destroy on logout, instead of assigning and clearing a `userId` field. Apply the same destroy to every session the user owns when their password changes.
 
-`(example omitted)`
+```js
+async function login(req, res, user) {
+  req.session.regenerate(() => {
+    req.session.userId = user.id;
+    res.json({ ok: true });
+  });
+}
+
+function logout(req, res) {
+  req.session.destroy(() => res.json({ ok: true }));
+}
+```
 
 Fails: setting `req.session.userId = user.id` without regenerate (a pre-login cookie survives into the authenticated session — fixation), or clearing `userId = null` on logout instead of destroying the record (a copied cookie keeps working).
 
@@ -70,7 +114,13 @@ Fails: setting `req.session.userId = user.id` without regenerate (a pre-login co
 
 Fix: use `crypto.randomBytes(32).toString("base64url")` (Python: `secrets.token_urlsafe(32)`). Where session middleware mints its own identifier, let it.
 
-`(example omitted)`
+```js
+import { randomBytes } from "node:crypto";
+
+function newResetToken() {
+  return randomBytes(32).toString("base64url");
+}
+```
 
 Fails: `Math.random()` or `Date.now()`-derived tokens. A non-crypto PRNG's state is recoverable from a few outputs, so an attacker can predict the next token — the long, random-looking string hides it.
 
@@ -82,7 +132,14 @@ Fails: `Math.random()` or `Date.now()`-derived tokens. A non-crypto PRNG's state
 
 Fix: set all three. Each guards a distinct takeover path — `httpOnly` keeps injected script from reading the cookie, `secure` keeps it off plain HTTP, `sameSite` keeps other sites from sending it. If local dev runs without TLS, gate only `secure` on the environment — never the other two.
 
-`(example omitted)`
+```js
+res.cookie("sid", token, {
+  httpOnly: true,
+  secure: true,
+  sameSite: "lax",
+  maxAge: 1000 * 60 * 60 * 24 * 7,
+});
+```
 
 Fails: a cookie set with only `maxAge` (or any of the three flags missing).
 
@@ -94,7 +151,21 @@ Fails: a cookie set with only `maxAge` (or any of the three flags missing).
 
 Fix: give the token row an `expiresAt` (an hour is generous) and a `usedAt`; reject when either check fails; write `usedAt` in the same transaction as the password update so two concurrent redemptions cannot both land.
 
-`(example omitted)`
+```js
+app.post("/reset/confirm", async (req, res) => {
+  const { token, password } = req.body;
+  const row = await db.resetToken.findUnique({ where: { token } });
+  if (!row || row.usedAt || row.expiresAt < new Date()) {
+    return res.status(400).json({ error: "Invalid or expired token" });
+  }
+  const hash = await argon2.hash(password);
+  await db.$transaction([
+    db.resetToken.update({ where: { token }, data: { usedAt: new Date() } }),
+    db.user.update({ where: { id: row.userId }, data: { passwordHash: hash } }),
+  ]);
+  res.json({ ok: true });
+});
+```
 
 Fails: redeeming on existence alone, with no `expiresAt`/`usedAt` check — an emailed link stays a permanent, reusable key.
 

@@ -31,7 +31,21 @@ whose only caller today is the app's own form.
 **Fix:** Parse at the top of the handler with a runtime schema (zod, Pydantic) and use only its
 output. Use an allowlist of accepted fields and types — never a denylist of bad substrings.
 
-`(example omitted)`
+```ts
+import { z } from "zod";
+
+const CreatePost = z.object({
+  title: z.string().min(1).max(200),
+  tags: z.array(z.string()).max(5),
+});
+
+app.post("/api/posts", requireAuth, async (req, res) => {
+  const parsed = CreatePost.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "Invalid body" });
+  const post = await db.post.create({ data: { ...parsed.data, authorId: req.session.userId } });
+  res.json(post);
+});
+```
 
 **Fails:** `const { title, tags } = req.body as CreatePost;` — a TypeScript cast is erased at runtime
 and checks nothing; the interface is a note to the compiler, which is not in the request path.
@@ -49,7 +63,16 @@ credit grant — any handler where money appears in the request body.
 id, and compute the total in the handler. Where the client must show a total first, have it read that
 total from a server endpoint rather than send its own back.
 
-`(example omitted)`
+```ts
+app.post("/api/checkout", requireAuth, async (req, res) => {
+  const { items } = CheckoutSchema.parse(req.body); // [{ productId, quantity }]
+  const products = await db.product.findMany({ where: { id: { in: items.map(i => i.productId) } } });
+  const total = items.reduce(
+    (sum, i) => sum + products.find(p => p.id === i.productId)!.priceCents * i.quantity, 0);
+  const intent = await stripe.paymentIntents.create({ amount: total, currency: "usd" });
+  res.json({ clientSecret: intent.client_secret });
+});
+```
 
 **Fails:** reading `total` (or `priceCents`) from the request body and passing it to the charge. A
 schema confirms `total` is an integer, never that it is the *right* integer.
@@ -67,7 +90,15 @@ raw request again.
 `parsed.data` — and never reference the raw request again after the parse. The output has undeclared
 fields stripped and declared ones coerced; the raw request has neither.
 
-`(example omitted)`
+```python
+@api_view(["PATCH"])
+def update_profile(request):
+    serializer = ProfileSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=400)
+    Profile.objects.filter(user=request.user).update(**serializer.validated_data)
+    return Response({"ok": True})
+```
 
 **Fails:** validating, then writing `**request.data` instead of `**serializer.validated_data` — the
 raw request reaches the ORM, reintroducing Gate 13 mass assignment two lines below a passing check.
@@ -85,7 +116,18 @@ document uploads, signed-URL flows that record a type.
 `Image.open(...).verify()` in Python) and take both the accept decision and the stored extension from
 the sniff result, never from a client-supplied string.
 
-`(example omitted)`
+```ts
+import { fileTypeFromBuffer } from "file-type";
+
+const ALLOWED = new Set(["image/jpeg", "image/png"]);
+
+app.post("/api/avatar", requireAuth, upload.single("file"), async (req, res) => {
+  const sniffed = await fileTypeFromBuffer(req.file.buffer);
+  if (!sniffed || !ALLOWED.has(sniffed.mime)) return res.status(400).json({ error: "Not an image" });
+  await store(req.file.buffer, sniffed.ext);
+  res.json({ ok: true });
+});
+```
 
 **Fails:** trusting `req.file.mimetype` (the client's `Content-Type`) or `originalname` (a
 client-typed string) for the accept decision.
@@ -101,7 +143,14 @@ client-typed string) for the accept decision.
 **Fix:** Set `limits.fileSize` and `limits.files` on the upload instance to the largest file the
 feature actually needs, so the stream aborts at the cap rather than after it.
 
-`(example omitted)`
+```ts
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+});
+
+app.post("/api/avatar", requireAuth, upload.single("file"), handler);
+```
 
 **Fails:** `multer({ storage: multer.memoryStorage() })` with no `limits` — multer sets no default
 size cap and buffers the whole upload into the process heap.
@@ -118,7 +167,19 @@ size cap and buffers the whole upload into the process heap.
 it to a directory outside every static root, and serve files through a handler that looks up the
 stored key.
 
-`(example omitted)`
+```ts
+import { randomUUID } from "node:crypto";
+
+const UPLOAD_DIR = "/var/app/uploads"; // outside the static root
+
+app.post("/api/avatar", requireAuth, upload.single("file"), async (req, res) => {
+  const sniffed = await fileTypeFromBuffer(req.file.buffer); // Gate 44
+  if (!sniffed) return res.status(400).json({ error: "Not an image" });
+  const key = `${randomUUID()}.${sniffed.ext}`;
+  await writeFile(join(UPLOAD_DIR, key), req.file.buffer);
+  res.json({ ok: true });
+});
+```
 
 **Fails:** building the path from `req.file.originalname` (client-chosen, so it can escape the
 directory or collide) and writing into a statically-served directory (serves attacker bytes back from

@@ -40,7 +40,16 @@ Covers the application's own credentials to other services — API keys, databas
 
 **Fix:** Write the `.gitignore` rule in the same change, before the file, with `!.env.example` so the template stays tracked. If the file is already tracked, Gate 33 applies.
 
-`(example omitted)`
+```gitignore
+# .gitignore — written in the same change, before .env or the database exists
+node_modules/
+.env
+.env.*
+!.env.example
+data/
+*.db
+*.sqlite
+```
 
 **Applies when:** emitting `.env`, `secrets.json`, a service-account JSON, a `*.pem`, or any local config holding a live value — **and equally when emitting the schema or connection for a file-backed datastore** (`*.db`, `*.sqlite`, `data/`, a dump or backup path). A SQLite file the app writes to holds every password hash and session token; committed alongside the `.env`, it is an offline cracking target. The gate applies when the file is named in source.
 
