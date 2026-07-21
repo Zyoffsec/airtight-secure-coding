@@ -16,7 +16,7 @@
 
 **AI writes your code. Who checks it?**
 
-Ask for a login and you get a good one — argon2, `httpOnly` cookies, ownership inside the query. The model knows all that. What it skips is the part nobody asked for: the rate limit, the lockout, the audit log. Guess the password thirty times and nothing stops you — no throttle, no record, invisible.
+Ask for a profile-update endpoint and you get a good one — validated input, parameterized query, ownership checked. The model knows all that. What it skips is the part nobody asked for: the field allowlist. The handler spreads the request body straight into the record, so send `"role": "admin"` next to your new username — and the server writes it. No error, no log, admin.
 
 **Airtight is the part of the request nobody makes:** hard gates on what the assistant may emit, checked *before* the code reaches you.
 
@@ -31,11 +31,13 @@ flowchart LR
 
 ## Measured, not claimed
 
-Same brief, two agents — one with Airtight, one without. A blind third scored and ran both.
+One login brief, two agents — one with Airtight, one without. A blind third scored and ran both.
 
-> **24 applicable gates &rarr; 24/24 with Airtight, 21/24 without.**
+> **Twelve controls compared &rarr; 12/12 with Airtight, six missing without.**
 
-The three misses: no rate limit, no lockout, no security log. Verified live — thirty guesses returned thirty `401`s with zero throttle and zero records; the Airtight build returned `429` and wrote ten audit lines. The control was *good* (scrypt, `timingSafeEqual`, `httpOnly`, ownership) — the gaps were **omissions, not bad crypto.**
+Both builds got the fundamentals right — password hashing, parameterized SQL, `httpOnly` cookies, clean session handling. The model is not incompetent. What the control skipped is the part nobody asks for: **rate limiting, account lockout, CSRF protection, security logging, length bounds — and it shipped a guessable session-secret fallback.** Verified live: thirty guesses, thirty `401`s, zero throttle, zero records; the Airtight build answered `429` and wrote ten audit lines. **Omissions, not incompetence.**
+
+And that is one brief. A login app wakes only a slice of the 67 gates — injection, XSS, SSRF, secrets and supply-chain checks had nothing to bite here. The full map is in [What it catches](#what-it-catches).
 
 Both apps and the full comparison &rarr; [`validation/`](validation/).
 
@@ -70,7 +72,7 @@ What it **doesn't**: business-logic bugs, unknown CVEs in your dependencies, or 
 
 ## Demo
 
-*A 30-second recording is coming — a good login, thirty silent break-in attempts, then the same with Airtight &rarr; `429` and a full audit log. It is the point of the whole project. [Contributions welcome.](CONTRIBUTING.md)*
+*A short recording is coming — one innocent request with one extra JSON field, an account that quietly becomes admin, then the same request against the Airtight build bouncing off Gate 13. It is the point of the whole project. [Contributions welcome.](CONTRIBUTING.md)*
 
 ---
 
