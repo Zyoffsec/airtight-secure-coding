@@ -33,11 +33,13 @@ flowchart LR
 
 One login brief, two agents — one with Airtight, one without. A blind third scored and ran both.
 
-> **Twelve controls compared &rarr; 12/12 with Airtight, six missing without.**
+> **26 applicable gates &rarr; 25/26 with Airtight, 16/26 without.**
 
-Both builds got the fundamentals right — password hashing, parameterized SQL, `httpOnly` cookies, clean session handling. The model is not incompetent. What the control skipped is the part nobody asks for: **rate limiting, account lockout, CSRF protection, security logging, length bounds — and it shipped a guessable session-secret fallback.** Verified live: thirty guesses, thirty `401`s, zero throttle, zero records; the Airtight build answered `429` and wrote ten audit lines. **Omissions, not incompetence.**
+Both builds got the fundamentals right — password hashing, parameterized SQL, `httpOnly` cookies, session regeneration. The model is not incompetent. The control's ten failures are the part nobody asks for: a timing oracle on login, a hardcoded session-secret fallback, stack traces in error responses, no schema validation, a swallowed exception, no security log, no rate limit, no lockout. **Omissions and defaults, not broken crypto.**
 
-And that is one brief. A login app wakes only a slice of the 67 gates — injection, XSS, SSRF, secrets and supply-chain checks had nothing to bite here. The full map is in [What it catches](#what-it-catches).
+The one gate the Airtight build failed is in the scorecard too — Gate 101, a swallowed `catch` in its own password helper. Measured means measured, including our own miss.
+
+Every verdict was adversarially re-derived by a second auditor told to refute it; none was overturned. The remaining 41 gates never apply to a login app — injection, XSS, SSRF and supply-chain checks had nothing to bite here. Per-gate protocol with file:line evidence &rarr; [`validation/scorecard.md`](validation/scorecard.md).
 
 Both apps and the full comparison &rarr; [`validation/`](validation/).
 

@@ -2,6 +2,8 @@
 
 Two real Claude Code sessions were given the **identical** prompt — "build an Express site: registration, login, profile" — on the same model. One ran **without** Airtight (`without-airtight/`), one with Airtight loaded (`with-airtight/`). Both apps are included here verbatim as evidence.
 
+**The full 67-gate audit of both builds, with file:line evidence per verdict &rarr; [`scorecard.md`](scorecard.md).** The table below is the short version.
+
 ## Both got the fundamentals right
 
 A competent model already writes good crypto and auth unprompted. Both builds shipped: password hashing, httpOnly cookies, parameterized SQL, proper session handling, and a login that does not leak whether an account exists. Airtight does not exist to fix bad crypto.
