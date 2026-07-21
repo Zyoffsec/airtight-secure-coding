@@ -1,66 +1,72 @@
-# Express Auth — registration, login, profile
+# Airtight build — written WITH the skill loaded
 
-Небольшое серверное приложение на Express: регистрация, вход, страница профиля.
-Сессии на cookie, пароли — argon2id, хранение — SQLite (файл создаётся автоматически).
+A small server-side **Express** app: registration, login, profile page. This is the
+treatment arm of the A/B test: a Claude Code session given the identical brief as the
+control build, with the Airtight skill loaded. The code is committed verbatim as
+evidence. Cookie sessions, argon2id passwords, SQLite storage (file created
+automatically).
 
-## Запуск
+## Run
 
 ```bash
 npm install
 cp .env.example .env
-# сгенерировать секрет сессии:
+# generate a session secret:
 node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
-# вставить его в SESSION_SECRET в .env, затем:
+# put it in SESSION_SECRET in .env, then:
 npm start
 ```
 
-Открыть http://localhost:3000 (или порт из `PORT`).
+Open http://localhost:3000 (or the port from `PORT`).
 
-## Маршруты
+## Routes
 
-| Метод | Путь         | Назначение                                  |
-| ----- | ------------ | ------------------------------------------- |
-| GET   | `/register`  | форма регистрации                           |
-| POST  | `/register`  | создать аккаунт, войти                       |
-| GET   | `/login`     | форма входа                                 |
-| POST  | `/login`     | вход                                        |
-| POST  | `/logout`    | выход (уничтожает сессию)                    |
-| GET   | `/profile`   | профиль текущего пользователя (требует входа)|
-| POST  | `/profile`   | сохранить имя и bio                          |
+| Method | Path        | Purpose                                        |
+| ------ | ----------- | ---------------------------------------------- |
+| GET    | `/register` | registration form                              |
+| POST   | `/register` | create an account, log in                      |
+| GET    | `/login`    | login form                                     |
+| POST   | `/login`    | log in                                         |
+| POST   | `/logout`   | log out (destroys the session)                 |
+| GET    | `/profile`  | current user's profile (login required)        |
+| POST   | `/profile`  | save display name and bio                      |
 
-## Структура
+## Layout
 
 ```
-server.js            точка входа, middleware, сессии, роутинг
-config.js            чтение env (SESSION_SECRET обязателен, без фолбэка)
-db.js                SQLite + схема
-models/user.js       все запросы к users (параметризованные)
-lib/password.js      argon2id: hash / verify + dummy-hash для единообразного тайминга
-lib/validate.js      zod-схемы для тел запросов
-lib/logger.js        структурные JSON-логи в stdout
-middleware/auth.js   requireAuth / redirectIfAuthed (личность только из сессии)
-middleware/csrf.js   синхронизирующий CSRF-токен
-routes/auth.js       register / login / logout + rate-limit + lockout
-routes/profile.js    просмотр и редактирование профиля
-views/               EJS-шаблоны (авто-экранирование)
+server.js            entry point, middleware, sessions, routing
+config.js            env reading (SESSION_SECRET required, no fallback)
+db.js                SQLite + schema
+models/user.js       all user queries (parameterized)
+lib/password.js      argon2id: hash / verify + dummy hash for timing uniformity
+lib/validate.js      zod schemas for request bodies
+lib/logger.js        structured JSON logs to stdout
+middleware/auth.js   requireAuth / redirectIfAuthed (identity from session only)
+middleware/csrf.js   synchronizer CSRF token
+routes/auth.js       register / login / logout + rate limit + lockout
+routes/profile.js    profile view and edit
+views/               EJS templates (auto-escaping)
 ```
 
-## Что заложено в безопасность
+## What the gates put in
 
-Код писался под secure-coding гейты (Airtight). Кратко:
+The code was written under Airtight's secure-coding gates. In short:
 
-- Пароли — **argon2id**, проверка через `argon2.verify` (не сравнение строк).
-- Логин отвечает одинаково при «нет такого пользователя» и «неверный пароль»
-  (в т.ч. по времени — прогоняется dummy-хэш), без утечки, какой аккаунт существует.
-- **Rate-limit** на `/login` и `/register` + **блокировка аккаунта** после 5 неудач.
-- Сессия **пересоздаётся** при входе и **уничтожается** при выходе; cookie —
-  `httpOnly` + `sameSite=lax` (+ `secure` в production).
-- Все SQL-запросы **параметризованы**; тела запросов валидируются zod, дальше
-  используется только результат валидации (в т.ч. allowlist полей профиля).
-- Секрет сессии — только из окружения, без хардкод-фолбэка; `.env` в `.gitignore`.
-- CSRF-токен на всех изменяющих формах; структурные логи событий безопасности.
+- Passwords — **argon2id**, verified via `argon2.verify` (never string comparison).
+- Login answers identically for "no such user" and "wrong password" — including in
+  timing, via a dummy-hash verify — leaking nothing about which accounts exist.
+- **Rate limit** on `/login` and `/register` plus **account lockout** after 5 failures.
+- The session is **regenerated** on login and **destroyed** on logout; the cookie is
+  `httpOnly` + `sameSite=lax` (+ `secure` in production).
+- Every SQL query is **parameterized**; request bodies are validated with zod and only
+  the validator's output is used afterwards (including a field allowlist for the
+  profile).
+- The session secret comes only from the environment, with no hardcoded fallback;
+  `.env` is gitignored.
+- A CSRF token on every mutating form; structured security-event logs.
 
-Это покрывает типовые ошибки-упущения в AI-коде, но **не** заменяет полный
-аудит: бизнес-логика, уязвимости в зависимостях и вопросы архитектуры сюда не входят.
-Для production также нужен HTTPS (`NODE_ENV=production` за TLS-прокси) и общий
-store для rate-limit при нескольких воркерах.
+This covers the typical omission-style mistakes in AI-written code, but it does
+**not** replace a full audit: business logic, vulnerable dependencies and
+architecture are out of scope. Production additionally needs HTTPS
+(`NODE_ENV=production` behind a TLS proxy) and a shared rate-limit store when
+running multiple workers.
