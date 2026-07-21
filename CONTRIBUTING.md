@@ -39,7 +39,7 @@ correct. There is no cost to a gap and no way back from a renumber.
 
 ### Which numbers are free
 
-Current allocation, as of the 29 published gates:
+Current allocation, as of the 67 published gates:
 
 | Range | Topic | File | Taken | Free |
 | --- | --- | --- | --- | --- |
@@ -48,7 +48,15 @@ Current allocation, as of the 29 published gates:
 | 20-29 | Injection | `vectors/injection.md` | 21, 22, 24, 26, 28 | 20, 23, 25, 27, 29 |
 | 30-39 | Configuration and secrets | `vectors/secrets.md` | 30, 31, 32, 33, 35, 37 | 34, 36, 38, 39 |
 | 40-49 | Input validation | `vectors/input.md` | 40, 41, 43, 44, 45, 46 | 42, 47, 48, 49 |
-| 50+ | — | — | — | **entire range unclaimed** |
+| 50-59 | Cross-site scripting | `vectors/xss.md` | 50, 51, 53, 55 | 52, 54, 56-59 |
+| 60-69 | Cryptographic failures | `vectors/crypto.md` | 60, 61, 63, 65 | 62, 64, 66-69 |
+| 70-79 | Server-side request forgery | `vectors/ssrf.md` | 70, 71, 74, 76 | 72, 73, 75, 77-79 |
+| 80-89 | Security misconfiguration | `vectors/misconfig.md` | 80, 81, 83, 85, 87 | 82, 84, 86, 88, 89 |
+| 90-99 | Software and data integrity | `vectors/integrity.md` | 90, 91, 93, 95, 96 | 92, 94, 97-99 |
+| 100-109 | Logging and monitoring | `vectors/logging.md` | 100, 101, 103, 107 | 102, 104-106, 108, 109 |
+| 110-119 | Vulnerable components | `vectors/dependencies.md` | 110, 112, 114, 115, 117, 118 | 111, 113, 116, 119 |
+| 120-129 | Insecure design | `vectors/design.md` | 120, 121, 123, 125, 127, 128 | 122, 124, 126, 129 |
+| 130+ | — | — | — | **entire range unclaimed** |
 
 Re-check the table in `references/gates.md` before you claim — this one can lag.
 
@@ -60,7 +68,7 @@ claim two ranges rather than borrowing a neighbour's numbers.
 1. **Open an issue titled `claim: <topic> (range NN-NN)`** before you write the file. One line on
    what the topic covers is enough. This is the whole reservation mechanism — the issue is the lock,
    and it exists so two people don't independently write gates 50-59.
-2. **Take the lowest free range from 50.** Don't reserve a nicer number for later.
+2. **Take the lowest free range from 130.** Don't reserve a nicer number for later.
 3. **If someone claimed it an hour before you**, take the next range. Renumbering your draft costs
    you ten minutes; renumbering a published gate costs everyone.
 4. **A claim goes stale after 30 days** with no PR. Say so on the issue and take it.
