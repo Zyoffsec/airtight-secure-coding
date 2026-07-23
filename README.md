@@ -46,7 +46,11 @@ Both apps and the full comparison &rarr; [`validation/`](validation/).
 ## Install
 
 ```bash
+# asks where to install: this project or globally
 npx skills add Zyoffsec/airtight-secure-coding
+
+# or install globally for all projects, no prompts
+npx skills add Zyoffsec/airtight-secure-coding -g -y
 ```
 
 Or clone it into your skills folder (Claude Code, Cursor, Codex):
