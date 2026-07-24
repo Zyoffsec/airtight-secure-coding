@@ -1,7 +1,7 @@
 ---
 name: airtight
 description: Secure-coding gates for AI-written code. Load when writing or modifying web application code, authentication and login flows, database queries, user input handling, file uploads, or configuration and secrets — and when the user types "airtight audit", "airtight harden", or "airtight prove".
-version: 0.3.1
+version: 0.3.2
 ---
 
 # Airtight

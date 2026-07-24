@@ -69,7 +69,13 @@ SURFACES = [
         r"\$(?:where|ne|gt|gte|lt|lte|regex|expr|function)\b",
     ]),
     ("config / secrets", range(30, 40), [
-        r"os\.environ", r"process\.env", r"getenv\s*\(", r"[A-Z_]*(SECRET|API_KEY|TOKEN|PASSWORD)[A-Z_]*\s*=",
+        r"os\.environ", r"process\.env", r"getenv\s*\(",
+        # Bounded on both sides. Unbounded `[A-Z_]*` around an alternation is the
+        # classic quadratic shape: under IGNORECASE it also matches lowercase, so a
+        # single 150 KB line of ordinary text made this hang for minutes and stalled
+        # every write in the session. An identifier longer than 32 characters either
+        # side of the keyword is not a name anyone types.
+        r"\b[A-Z_]{0,32}(?:SECRET|API_KEY|TOKEN|PASSWORD)[A-Z_]{0,32}\s*=",
     ]),
     ("untrusted input / upload", range(40, 50), [
         r"\bUploadFile\b", r"multipart", r"request\.(body|json|form|files)",
@@ -126,9 +132,17 @@ ROUTE_RE = re.compile(
     | \b(?:APIView|ViewSet|ModelViewSet|GenericAPIView)\b | @api_view\s*\(
     # Rails router
     | ^\s*(?:get|post|put|patch|delete|resources|resource)\s+['":]
-    # Next.js route handlers
-    | \bexport\s+(?:default\s+)?(?:async\s+)?function\s+(?:handler|GET|POST|PUT|PATCH|DELETE)\s*\(
-    | \bexport\s+const\s+(?:GET|POST|PUT|PATCH|DELETE)\s*=
+    # Next.js route handlers, and SvelteKit's load / actions
+    | \bexport\s+(?:default\s+)?(?:async\s+)?function\s+(?:handler|GET|POST|PUT|PATCH|DELETE|load)\s*\(
+    | \bexport\s+const\s+(?:GET|POST|PUT|PATCH|DELETE|actions)\s*=
+    # WebSocket endpoints: long-lived, and just as unauthenticated by default
+    | @(?:app|router)\.websocket\s*\( | \bwebsocket_route\s*\(
+    | \bio\.on\s*\(\s*['"]connection | \bwss\.on\s*\(\s*['"]connection
+    # GraphQL resolvers, which have no route-level auth to inherit. The `info`
+    # argument carries the request context, and is what makes this a resolver
+    # rather than an ordinary function that happens to be named resolve_*.
+    | \bdef\s+resolve_\w+\s*\([^)]*\binfo\b
+    | @(?:strawberry|graphene|gql)\.\w*(?:field|query|mutation)
     # Rails controllers
     | \bclass\s+\w+Controller\s*<
     # ASP.NET — attributes and minimal API
@@ -145,7 +159,7 @@ ROUTE_RE = re.compile(
 # Next.js / SvelteKit put routes in the path, not the syntax.
 ROUTE_PATH_RE = re.compile(
     r"(?:^|/)(?:pages|app)/api/|(?:^|/)app/[^/]*/route\.[jt]sx?$"
-    r"|(?:^|/)routes/.*\+server\.[jt]s$",
+    r"|(?:^|/)routes/.*\+(?:server|page\.server)\.[jt]s$",
     re.IGNORECASE,
 )
 
@@ -177,9 +191,25 @@ AUTH_RE = re.compile(
     | @PreAuthorize | @Secured | SecurityContextHolder | isAuthenticated\s*\(
     # A dependency or guard named for what it resolves — current_session,
     # require_user, get_principal — is an authentication step whatever the codebase
-    # chose to call it.
-    | \b(?:current|require|get|resolve|load|verify)_(?:session|user|principal|identity|account|viewer)\b
-    | Depends\s*\(\s*\w*(?:session|user|auth|principal|identity)\w*\s*\)
+    # chose to call it. Both casings: Go and Java spell the same idea RequireSession.
+    | \b(?:current|require|get|resolve|load|verify|authenticated)_
+        (?:session|user|principal|identity|account|viewer)\b
+    | \b(?:Current|Require|Get|Resolve|Load|Verify|Authenticated)
+        (?:Session|User|Principal|Identity|Account|Viewer)\b
+    # camelCase, as JavaScript spells it: requireAuth, ensureSignedIn, checkSession.
+    | \b(?:require|ensure|check|assert|verify|with|is)
+        (?:Auth|Authenticated|SignedIn|LoggedIn|Session|User|Login|Token)\b
+    # GraphQL and framework request contexts, where the principal arrives on the
+    # context object rather than as a decorator: info.context["user"], ctx.user,
+    # locals.session, event.locals.user.
+    | \b(?:info|ctx|context|locals|event)\s*\.\s*
+        (?:context\s*)?[\[.]\s*['"]?(?:user|session|viewer|principal|identity|auth)
+    | Depends\s*\(\s*\w*(?:session|user|auth|principal|identity|viewer)\w*\s*\)
+    | Security\s*\(\s*\w+
+    # A middleware chain that names authentication: r.Use(RequireSession),
+    # app.use(requireSignedIn), router.use(ensureAuth).
+    | \.[Uu]se\s*\(\s*\w*(?:[Aa]uth|[Ss]ession|[Ss]igned|[Ll]ogin|[Tt]oken|[Uu]ser)\w*
+    | before_request\b | @app\.before_request
     # ASP.NET
     | \[Authorize | User\.Identity | HttpContext\.User | ClaimsPrincipal
     # Rust
@@ -194,6 +224,16 @@ AUTH_RE = re.compile(
 # nothing, so route- and webhook-shaped findings do not apply to it. A credential
 # literal still does — a key pasted into a README leaks exactly like one in source.
 PROSE_PATH_RE = re.compile(r"\.(?:md|markdown|mdx|rst|txt|adoc)$", re.IGNORECASE)
+
+# This file is the one that necessarily contains an example of everything the guard
+# detects — its self-test corpus is made of them. Without this it denies its own
+# source, and a contributor cannot edit the guard at all.
+#
+# This is not the guard excusing itself from the gates: the code here still has to be
+# correct, and every other file in the project is checked normally. It is a detector
+# declining to fire on its own test fixtures, and the exemption is a path written in
+# the source rather than a marker any assistant can produce.
+SELF_PATH_RE = re.compile(r"(?:^|/)airtight_guard_impl\.py$")
 
 # A password in a test fixture is a value the suite needs, not a credential that
 # ships. Denying it teaches developers that the guard does not understand their
@@ -417,8 +457,10 @@ def webhook_finding(path, body):
     )
 
 
-# A value spliced into a query or command string: f-string, %, +, or `${}`.
-_INTERP = r"""(?: f['"] | \$\{ | %\s*[\w(] | ['"`]\s*\+\s*\w | \.format\s*\( )"""
+# A value spliced into a query or command string: f-string, %, +, `${}`, or PHP's
+# dot concatenation and its "$var inside a double-quoted string" interpolation.
+_INTERP = r"""(?: f['"] | \$\{ | %\s*[\w(] | ['"`]\s*\+\s*\w | \.format\s*\(
+                | ['"]\s*\.\s*\$\w | \$\w+\s*\.\s*['"] | "[^"\n]*\$\w )"""
 
 # A value spliced into the query *string itself*.
 #
@@ -428,14 +470,28 @@ _INTERP = r"""(?: f['"] | \$\{ | %\s*[\w(] | ['"`]\s*\+\s*\w | \.format\s*\( )""
 # read-only tool — the worst kind of false positive, the kind that gets a guard
 # switched off. Every alternative below stays inside one string literal, so
 # neighbouring code cannot contribute a match.
+# SELECT, FROM, WHERE, UPDATE and DELETE are ordinary English words. `f"built
+# from {path}"` is a sentence, not a query, and reading it as one denied a shell
+# helper that touches no database. So a string has to carry a SQL *shape* — a
+# keyword pair that prose does not accidentally produce — before interpolation
+# inside it means anything.
+_SQL_SHAPE = r"""(?: SELECT \b [^"'`\n]*? \b FROM \b
+                   | INSERT \s+ INTO \b
+                   | UPDATE \b [^"'`\n]*? \b SET \b
+                   | DELETE \s+ FROM \b
+                   | FROM \s+ \w+ [^"'`\n]*? \b WHERE \b )"""
+
 QUERY_INTERP_RE = re.compile(
     r"""(?ix)
-    (?: # an f-string or template literal that carries SQL and a substitution
-        \bf" [^"\n]*? \b(?:SELECT|INSERT|UPDATE|DELETE|WHERE|FROM)\b [^"\n]*? \{
-      | \bf' [^'\n]*? \b(?:SELECT|INSERT|UPDATE|DELETE|WHERE|FROM)\b [^'\n]*? \{
-      | `    [^`]*?   \b(?:SELECT|INSERT|UPDATE|DELETE|WHERE|FROM)\b [^`]*?   \$\{
+    (?: # a triple-quoted f-string — how anything longer than one line is written
+        \bf\"\"\" .{0,600}? """ + _SQL_SHAPE + r""" .{0,600}? \{
+      | \bf''' .{0,600}? """ + _SQL_SHAPE + r""" .{0,600}? \{
+      # an f-string or template literal that carries SQL and a substitution
+      | \bf" [^"\n]*? """ + _SQL_SHAPE + r""" [^"\n]*? \{
+      | \bf' [^'\n]*? """ + _SQL_SHAPE + r""" [^'\n]*? \{
+      | `    [^`]*?   """ + _SQL_SHAPE + r""" [^`]*?   \$\{
       # a SQL string closed, then concatenated with or formatted by a value
-      | ["'] [^"'\n]*? \b(?:SELECT|INSERT|UPDATE|DELETE|WHERE|FROM)\b [^"'\n]*? ["']
+      | ["'] [^"'\n]*? """ + _SQL_SHAPE + r""" [^"'\n]*? ["']
         \s* (?: \+\s*\w | %\s*[\w(] | \.format\s*\( )
       # the drivers' own escape hatches, unsafe by name
       | \$queryRawUnsafe\s*\( | \$executeRawUnsafe\s*\( )
@@ -444,7 +500,9 @@ QUERY_INTERP_RE = re.compile(
 
 SHELL_INTERP_RE = re.compile(
     r"""(?ix)
-    (?: (?: os\.system | os\.popen | child_process\.exec | \bexecSync | \bshell_exec )
+    (?: (?: os\.system | os\.popen | child_process\.exec | \bexecSync | \bshell_exec
+          # PHP's shell family, and Python's exec, which evaluates what it is handed
+          | \bpassthru | \bproc_open | \bpcntl_exec | \bexec | \bsystem )
         \s*\(\s* [^)\n]{0,80}? """ + _INTERP + r"""
       | subprocess\.(?:run|call|check_output|Popen)\s*\([^)]*shell\s*=\s*True )
     """,
@@ -473,7 +531,14 @@ RAW_SINK_RE = re.compile(
     r"""(?ix)
     (?: dangerouslySetInnerHTML\s*=\s*\{\{
       | v-html\s*=
-      | \binsertAdjacentHTML\s*\( )
+      # insertAdjacentHTML's second argument is the markup. A bare literal there is
+      # static markup the developer wrote; anything else can carry a value.
+      #
+      # The whitespace lives inside the lookahead deliberately. Written as
+      # `,\s*(?!...)` the engine backtracks `\s*` to zero, applies the lookahead to a
+      # space, finds no literal there and lets the match through — so the negative
+      # lookahead has to own everything it needs to see.
+      | \binsertAdjacentHTML\s*\(\s*['"][^'"]*['"]\s*,(?!\s*['"][^'"{}$]*['"]\s*\)) )
     """
 )
 SANITIZER_RE = re.compile(
@@ -515,11 +580,19 @@ def sql_injection_finding(path, body):
     )
 
 
+# Where a language has no argument-list form, escaping at the boundary is the
+# remedy the language actually offers. PHP's escapeshellarg is Gate 26 satisfied,
+# not violated, so a call carrying it is not this finding.
+SHELL_ESCAPED_RE = re.compile(r"(?i)escapeshellarg|escapeshellcmd|shlex\.quote|shellescape")
+
+
 def command_injection_finding(path, body):
     """A value interpolated into a shell command. Gate 26."""
     if PROSE_PATH_RE.search(path or ""):
         return None
     if not SHELL_INTERP_RE.search(body):
+        return None
+    if SHELL_ESCAPED_RE.search(body):
         return None
     return (
         "COMMAND BUILT BY INTERPOLATION — a value reaches a shell as text. Gate 26 FAILS. "
@@ -610,6 +683,8 @@ CORS_WILDCARD_RE = re.compile(
 CORS_CREDENTIALS_RE = re.compile(
     r"(?i)allow_credentials\s*=\s*True|credentials\s*:\s*true|supports_credentials\s*=\s*True"
     r"|withCredentials\s*:\s*true|CORS_ALLOW_CREDENTIALS\s*=\s*True"
+    # Hand-written headers, which is how a reflected origin usually arrives.
+    r"""|Access-Control-Allow-Credentials["']?\s*[,:]\s*["']?true"""
 )
 
 SET_COOKIE_RE = re.compile(
@@ -693,9 +768,11 @@ def cookie_flags_finding(path, body):
         # The value may be a constant (secure=COOKIE_SECURE) rather than a literal.
         # Anything but an explicit falsy counts as set; naming a flag and disabling it
         # is a decision, not an omission, and this finding is about omissions.
-        ("httpOnly", r"(?i)http_?only\s*[=:]\s*(?!False|false|0|None|null)\w"),
-        ("secure", r"(?i)\bsecure\s*[=:]\s*(?!False|false|0|None|null)\w"),
-        ("sameSite", r"(?i)same_?site\s*[=:]"),
+        # The name may also be a quoted dict key — `{"httponly": True}` — so a closing
+        # quote is allowed before the separator.
+        ("httpOnly", r"""(?i)http_?only["']?\s*[=:]\s*(?!False|false|0|None|null)\w"""),
+        ("secure", r"""(?i)\bsecure["']?\s*[=:]\s*(?!False|false|0|None|null)\w"""),
+        ("sameSite", r"""(?i)same_?site["']?\s*[=:]"""),
     ) if not re.search(rx, body)]
     if not missing:
         return None
@@ -791,7 +868,9 @@ WEAK_PASSWORD_HASH_RE = re.compile(
     (?: hashlib\.(?:md5|sha1|sha224|sha256|sha384|sha512)\s*\([^)]{0,80}passw
       | (?:md5|sha1|sha256|sha512)\s*\([^)]{0,80}passw
       | createHash\s*\(\s*['"](?:md5|sha1|sha256|sha512)['"]\s*\)[^;\n]{0,120}passw
-      | passw\w*[^;\n]{0,80}(?:hashlib\.)?(?:md5|sha1|sha256|sha512)\s*\(
+      # `\w*` followed by another quantified span is the nested shape that blows up:
+      # a line repeating the word PASSWORD made this hang. Both are bounded now.
+      | passw\w{0,16}[^;\n]{0,80}(?:hashlib\.)?(?:md5|sha1|sha256|sha512)\s*\(
       | digest\s*\(\s*\)[^;\n]{0,40}passw )
     """
 )
@@ -918,7 +997,7 @@ def run(raw):
     ti = payload.get("tool_input") or {}
     path = ti.get("file_path", "") or ""
     body = " ".join(str(ti.get(k, "")) for k in ("content", "new_string", "edits"))
-    if not body.strip() or len(body) > MAX_BODY:
+    if not body.strip() or len(body) > MAX_BODY or SELF_PATH_RE.search(path):
         return
 
     findings = [f for f in (
@@ -1073,6 +1152,25 @@ _CASES_DENY = [
     ("sqli by .format", "/x/d.py", 'db.execute("SELECT * FROM u WHERE id={}".format(uid))'),
     ("sqli via a sql variable", "/x/d.py", 'sql = f"SELECT * FROM logs WHERE user={uid}"\ncur.execute(sql)'),
     ("sqli in an update", "/x/d.py", 'cur.execute(f"UPDATE users SET role=\'{role}\' WHERE id={uid}")'),
+    ("sqli in a triple-quoted query", "/x/d.py", 'cur.execute(f"""SELECT id, total FROM orders WHERE owner = {owner} LIMIT 10""")'),
+    ("sqli in a where clause built apart", "/x/d.py", 'clause = f"WHERE owner_id = {owner}"\ncur.execute("SELECT id, total FROM orders " + clause)'),
+    ("sqli in an order by", "/x/d.py", 'cur.execute(f"SELECT id FROM orders ORDER BY {request.args[\'sort\']}")'),
+    ("salted sha256 is still fast", "/x/a.py", 'import hashlib\ndigest = hashlib.sha256((salt + password).encode()).hexdigest()'),
+    ("open route beside unrelated middleware", "/x/s.js", 'app.use(bodyParser.json());\napp.use(compression());\napp.get("/invoices", async (req, res) => res.json(await Invoice.findAll()))'),
+    # Surfaces that are routes without looking like one.
+    ("websocket accepting anyone", "/x/ws.py", '@app.websocket("/feed")\nasync def feed(ws: WebSocket):\n    await ws.accept()\n    async for e in stream_all():\n        await ws.send_json(e)'),
+    ("graphql resolver with no viewer", "/x/resolvers.py", 'async def resolve_invoices(root, info, first=50):\n    return await Invoice.all(limit=first)'),
+    ("sveltekit load with no user", "/x/routes/+page.server.js", 'export async function load() {\n  return { invoices: await db.allInvoices() };\n}'),
+    ("django raw sql interpolated", "/x/views.py", 'Invoice.objects.raw(f"SELECT * FROM invoices WHERE owner_id = {owner}")'),
+    ("migration interpolating input", "/x/migrations/004.py", 'op.execute(f"UPDATE users SET role = \'{new_role}\' WHERE id = {user_id}")'),
+    ("dockerfile with a baked secret", "/x/Dockerfile", 'FROM python:3.12\nENV API_KEY="prod-key-8f2a91cc"\nCMD ["python", "app.py"]'),
+    ("cors reflecting the request origin", "/x/s.js", 'res.header("Access-Control-Allow-Origin", req.headers.origin);\nres.header("Access-Control-Allow-Credentials", "true");'),
+    ("php shell_exec by concatenation", "/x/t.php", 'shell_exec("convert " . $name);'),
+    ("php exec with an interpolated variable", "/x/t.php", 'exec("rm -rf $dir");'),
+    ("python exec of a built string", "/x/t.py", 'exec(f"result = {expr}")'),
+    ("insertAdjacentHTML with a value", "/x/a.js", 'el.insertAdjacentHTML("beforeend", userComment)'),
+    ("vue v-html", "/x/C.vue", '<div v-html="post.body"></div>'),
+    ("outerHTML from a variable", "/x/a.js", 'node.outerHTML = payload'),
     ("open route beside a user helper", "/x/m.py", '@app.get("/orders")\ndef f(db=Depends(get_db)):\n    return db.query(Order).all()\n\ndef get_user_by_id(uid):\n    return db.query(User).get(uid)'),
     ("cookie explicitly insecure", "/x/m.py", 'response.set_cookie("session", t, httponly=True, secure=False, samesite="lax")'),
     ("real secret fallback", "/x/c.py", 'K = os.environ.get("JWT_SECRET_KEY", "dev-secret-value")'),
@@ -1111,6 +1209,38 @@ _CASES_ALLOW = [
     # read as interpolation inside the query above it.
     ("sql beside an unrelated f-string", "/x/d.py", 'c.execute("SELECT id, lang FROM conversations WHERE id BETWEEN ? AND ?", (lo, hi))\nprint(f"conv {cid:4d} | {lang}")'),
     ("like pattern as a bound value", "/x/d.py", 'cur.execute("SELECT * FROM u WHERE name LIKE ?", ("%" + q + "%",))'),
+    # "from" and "where" are ordinary English. A sentence is not a query, and reading
+    # one as a query denied a shell helper that touches no database.
+    ("prose containing the word from", "/x/t.py", 'out = subprocess.run(["git", "log", "-1"], capture_output=True, text=True)\nprint(f"built from {out.stdout.strip()}")'),
+    ("prose containing select and delete", "/x/copy.js", 'export const strings = { plan: "Select a plan to continue", warn: "Delete removes every invoice." };'),
+    # Go and Java spell authentication in CamelCase; JavaScript in camelCase.
+    ("go middleware chain", "/x/main.go", 'r := chi.NewRouter()\nr.Use(RequireSession)\nr.Get("/invoices", func(w http.ResponseWriter, req *http.Request) {\n    u := SessionUser(req.Context())\n    json.NewEncoder(w).Encode(store.InvoicesFor(u.ID, 100))\n})'),
+    ("express router.use middleware", "/x/routes.js", 'const router = require("express").Router();\nrouter.use(requireSignedIn);\nrouter.get("/invoices", async (req, res) => res.json(await Invoice.forOwner(req.user.id)));'),
+    ("flask blueprint before_request", "/x/views.py", 'bp = Blueprint("invoices", __name__)\n\n@bp.before_request\ndef require_login():\n    if not g.get("user"):\n        abort(401)\n\n@bp.route("/invoices")\ndef invoices():\n    return jsonify(Invoice.owned_by(g.user.id).limit(100).all())'),
+    # Cookie flags are often a dict of quoted keys splatted into the call.
+    ("cookie flags from a settings dict", "/x/auth.py", 'COOKIE = {"httponly": True, "secure": True, "samesite": "lax"}\n\ndef issue(response, token):\n    response.set_cookie("session", token, **COOKIE)'),
+    ("django login-required mixin", "/x/views.py", 'class InvoiceList(LoginRequiredMixin, ListView):\n    model = Invoice\n    def get_queryset(self):\n        return Invoice.objects.filter(owner=self.request.user)[:100]'),
+    ("sql column chosen from a literal map", "/x/d.py", 'SORTS = {"date": "placed_at", "total": "total"}\ncolumn = SORTS.get(sort, "placed_at")\nconn.execute(f"SELECT id, total FROM orders WHERE owner_id = ? ORDER BY {column} LIMIT ?", (owner_id, 100))'),
+    # The principal can arrive on a context object rather than through a decorator.
+    ("graphql resolver reading the context user", "/x/resolvers.py", 'async def resolve_invoices(root, info, first=50):\n    viewer = info.context["user"]\n    return await Invoice.for_owner(viewer.id, limit=min(first, 100))'),
+    ("sveltekit load requiring a user", "/x/routes/+page.server.js", 'export async function load({ locals }) {\n  const user = requireUser(locals);\n  return { invoices: await db.invoicesFor(user.id, 100) };\n}'),
+    ("websocket with a dependency", "/x/ws.py", '@app.websocket("/feed")\nasync def feed(ws: WebSocket, user=Depends(current_user)):\n    await ws.accept()\n    async for event in stream_for(user.id):\n        await ws.send_json(event)'),
+    # Repository furniture that is not application code.
+    ("documentation quoting a bad example", "/x/docs/guide.md", 'Never write this:\n\n```python\ncur.execute(f"SELECT * FROM users WHERE id = {uid}")\n```\n\nBind the value instead.'),
+    ("kubernetes secret reference", "/x/deploy/api.yaml", 'env:\n  - name: DATABASE_URL\n    valueFrom:\n      secretKeyRef:\n        name: api-secrets\n        key: database-url'),
+    ("terraform sensitive variable", "/x/infra/main.tf", 'variable "db_password" {\n  type      = string\n  sensitive = true\n}'),
+    ("test factory password", "/x/tests/factories.py", 'class UserFactory(factory.Factory):\n    password = "test-password-value"'),
+    ("celery task with no shell", "/x/tasks.py", '@shared_task(bind=True, max_retries=3)\ndef send_receipt(self, order_id):\n    order = Order.objects.get(pk=order_id)\n    mail.send(order.customer.email, render("receipt", order=order))'),
+    # `,\s*(?!…)` backtracks to zero spaces and lets a literal through; the lookahead
+    # has to own the whitespace it needs to see.
+    ("insertAdjacentHTML with static markup", "/x/a.js", 'el.insertAdjacentHTML("beforeend", "<hr>")'),
+    ("vue v-text is not a raw sink", "/x/C.vue", '<div v-text="post.body"></div>'),
+    ("cors reflecting origin without credentials", "/x/s.js", 'res.header("Access-Control-Allow-Origin", req.headers.origin);'),
+    ("php argument escaped before the shell", "/x/t.php", 'shell_exec("convert " . escapeshellarg($name));'),
+    ("php pdo with a bound value", "/x/d.php", '$s = $pdo->prepare("SELECT * FROM users WHERE id = ?"); $s->execute([$id]);'),
+    ("the word system in ordinary copy", "/x/a.js", 'const msg = "the system is fine"'),
+    # The guard's own implementation carries an example of everything it detects.
+    ("the guard's own source", "/x/hooks/airtight_guard_impl.py", 'os.system(f"rm -rf {path}")\ncur.execute(f"SELECT * FROM u WHERE id={uid}")'),
     ("subprocess arg list", "/x/c.py", 'subprocess.run(["convert", n, "o.png"])'),
     ("innerHTML literal", "/x/u.js", 'box.innerHTML = "<b>Hi</b>";'),
     ("sanitised sink", "/x/u.js", 'el.innerHTML = DOMPurify.sanitize(bio)'),
@@ -1161,7 +1291,26 @@ def _decide(path, content):
     return json.loads(out)["hookSpecificOutput"].get("permissionDecision", "context")
 
 
+# Inputs shaped to make the patterns backtrack. A guard that stalls is as broken as
+# one that crashes — it holds up every write in the session — and two patterns did
+# stall here for minutes before they were bounded. Each must finish well inside the
+# budget, on this machine and on a slower one.
+_STALL_BUDGET = 5.0
+
+_STALL_CASES = [
+    ("one very long line", "x.py", lambda: "a = " + "x" * 150_000),
+    ("one very long token", "x.py", lambda: "SELECT" + "A" * 100_000),
+    ("a repeated secret-shaped word", "x.py", lambda: "SECRET_KEY_TOKEN_PASSWORD_" * 4000),
+    ("bare sql keywords, no delimiters", "x.py", lambda: "SELECT FROM WHERE UPDATE SET DELETE " * 2000),
+    ("unclosed quotes", "x.py", lambda: 'f"' * 5000),
+    ("unclosed braces after sql", "x.py", lambda: 'f"SELECT x FROM y ' + "{" * 3000),
+    ("template literal fragments", "x.js", lambda: "`SELECT FROM ${" * 2000),
+]
+
+
 def selftest():
+    import time
+
     failures = []
     for label, path, code in _CASES_DENY:
         got = _decide(path, code)
@@ -1172,11 +1321,22 @@ def selftest():
         if got == "deny":
             failures.append(f"  FALSE  {label}: denied clean code")
 
-    total = len(_CASES_DENY) + len(_CASES_ALLOW)
+    slowest = 0.0
+    for label, path, build in _STALL_CASES:
+        started = time.time()
+        _decide(path, build())
+        elapsed = time.time() - started
+        slowest = max(slowest, elapsed)
+        if elapsed > _STALL_BUDGET:
+            failures.append(f"  STALL  {label}: {elapsed:.1f}s over a {_STALL_BUDGET:.0f}s budget")
+
+    total = len(_CASES_DENY) + len(_CASES_ALLOW) + len(_STALL_CASES)
     gates = len(load_gate_lines())
     print(f"registry: {gates} gates from {GATES or 'NOT FOUND'}")
     print(f"cases:    {total - len(failures)}/{total} "
-          f"({len(_CASES_DENY)} must deny, {len(_CASES_ALLOW)} must pass)")
+          f"({len(_CASES_DENY)} must deny, {len(_CASES_ALLOW)} must pass, "
+          f"{len(_STALL_CASES)} must not stall)")
+    print(f"slowest hostile input: {slowest:.2f}s")
     if failures:
         print("\n".join(failures))
         print("SELFTEST FAILED")

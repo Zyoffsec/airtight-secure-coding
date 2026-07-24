@@ -9,7 +9,7 @@
     {
       "name": "airtight",
       "description": "Secure-coding gates for AI-written code: 70 numbered gates mapped to OWASP Top 10 and CWE, plus a pre-write guard that stops the write when it can prove the failure.",
-      "version": "0.3.1",
+      "version": "0.3.2",
       "author": {
         "name": "Zy"
       },

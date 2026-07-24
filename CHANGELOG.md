@@ -2,6 +2,61 @@
 
 All notable changes to this skill are recorded here.
 
+## [0.3.2] — 2026-07-24
+
+Ten defects found by writing realistic code and watching what the guard did with it.
+Two of them were stalls, which matter most: a guard that hangs holds up every write in
+the session, and the developer cannot tell it apart from a hung editor.
+
+### Fixed
+
+- **Two inputs made the guard hang for minutes.** A single 150 KB line of ordinary text,
+  and a line repeating the word `PASSWORD`. Both came from unbounded quantifiers beside an
+  alternation — `[A-Z_]*(SECRET|API_KEY|TOKEN|PASSWORD)[A-Z_]*` under `IGNORECASE` matches
+  lowercase too, so it tried every start position with a long greedy match and backed out
+  of each. Both are bounded now, and seven hostile inputs are part of `--selftest` with a
+  five-second budget, so a stall fails the suite rather than reaching anyone.
+- **`f"built from {path}"` was read as SQL.** `SELECT`, `FROM`, `WHERE`, `UPDATE` and
+  `DELETE` are ordinary English words; a sentence containing one of them is not a query.
+  Interpolation now only counts inside a string carrying a SQL *shape* — `SELECT … FROM`,
+  `INSERT INTO`, `UPDATE … SET`, `DELETE FROM` — which prose does not produce by accident.
+- **Authentication written in Go or JavaScript casing went unrecognised**, so
+  `r.Use(RequireSession)` and `router.use(requireSignedIn)` read as open routes. Both
+  casings are recognised, along with middleware chains, `before_request`, and a principal
+  arriving on a context object (`info.context["user"]`, `locals`).
+- **Cookie flags declared as a dict of quoted keys** — `{"httponly": True, "secure": True}`
+  splatted into `set_cookie` — read as flags missing entirely.
+- **Multi-line SQL escaped the injection check**, because a triple-quoted f-string is where
+  any query longer than one line actually lives.
+
+### Added
+
+- **WebSocket endpoints, GraphQL resolvers and SvelteKit `load` are routes.** None of them
+  look like a route decorator, and all three are unauthenticated by default. A resolver is
+  recognised by its `info` argument rather than its name, so an ordinary function called
+  `resolve_something` is left alone.
+- **WebSocket endpoints, GraphQL resolvers and SvelteKit `load`** are treated as routes.
+- **PHP's shell family and string concatenation**, so `shell_exec("convert " . $name)` is
+  caught — and `escapeshellarg`, `escapeshellcmd` and `shlex.quote` are recognised as the
+  remedy rather than flagged as the problem.
+- **A CORS origin reflected through a hand-written header**, which is how the wildcard
+  usually arrives in Express.
+- `--selftest` grows from 97 cases to **145**, and now reports the slowest hostile input.
+  Every defect above is pinned as a case, in both directions: the false positive that was
+  denied, and the real failure that must still be caught.
+
+### Notes
+
+- **The guard no longer denies its own implementation.** That file necessarily contains an
+  example of everything the guard detects — its self-test corpus is made of them — so
+  without the exemption nobody can edit the guard at all. Every other file in the project,
+  including the vector files full of vulnerable examples, is checked normally.
+- Two more false positives were caught by the self-test itself while this release was being
+  written: `escapeshellarg` denied as injection, and a static `insertAdjacentHTML` denied
+  because `,\s*(?!…)` backtracks to zero spaces and applies the lookahead to whitespace.
+  Both are pinned as cases now. The suite catching its author's regressions before they
+  ship is the whole point of it.
+
 ## [0.3.1] — 2026-07-24
 
 ### Fixed
