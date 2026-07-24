@@ -6,6 +6,7 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/Zyoffsec/airtight-secure-coding/releases/latest"><img src="https://img.shields.io/github/v/release/Zyoffsec/airtight-secure-coding?color=3E6FA8&label=release" alt="latest release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-3a9d3a" alt="MIT"></a>
   <img src="https://img.shields.io/badge/works%20with-Claude%20Code%20%7C%20Cursor%20%7C%20Codex-2f6db0" alt="works with Claude Code, Cursor, Codex">
   <img src="https://img.shields.io/badge/checks-70%20across%2014%20topics-3E6FA8" alt="70 checks across 14 topics">
