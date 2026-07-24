@@ -94,8 +94,12 @@ pay for is the fix.
 ### Updating
 
 Nothing to do. Claude Code refreshes marketplaces and updates installed plugins on its
-own, so a release reaches you without a command. `/plugin update airtight` forces it early
-if you want a fix now.
+own, so a release reaches you without a command.
+
+To pull one early, name the plugin and its marketplace — `/plugin update airtight@airtight`.
+The short form reports the plugin as not found. `/plugin details airtight` reads the
+marketplace catalogue rather than what is installed, so it can show a version you do not
+have yet; `/plugin list` shows the one you are actually running.
 
 That is the platform updating something you installed through it, on its own schedule and
 with its own integrity checks — not this project reaching onto your machine. Airtight
