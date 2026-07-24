@@ -420,15 +420,26 @@ def webhook_finding(path, body):
 # A value spliced into a query or command string: f-string, %, +, or `${}`.
 _INTERP = r"""(?: f['"] | \$\{ | %\s*[\w(] | ['"`]\s*\+\s*\w | \.format\s*\( )"""
 
+# A value spliced into the query *string itself*.
+#
+# The first version scanned a 200-character window after the SQL keyword. That
+# window walked past the end of the statement and picked up the `f"..."` of an
+# unrelated print on the following line, so it denied a correctly parameterised
+# read-only tool — the worst kind of false positive, the kind that gets a guard
+# switched off. Every alternative below stays inside one string literal, so
+# neighbouring code cannot contribute a match.
 QUERY_INTERP_RE = re.compile(
     r"""(?ix)
-    (?: \.(?:execute|executemany|query|fetch|fetchall|fetchone|raw)\s*\(\s*"""
-    + _INTERP + r"""
-      | \$queryRawUnsafe\s*\( | \$executeRawUnsafe\s*\(
-      | \bsql\s*=\s*""" + _INTERP + r""".*?\b(?:SELECT|INSERT|UPDATE|DELETE)\b
-      | \b(?:SELECT|INSERT|UPDATE|DELETE)\b[^;]{0,200}?""" + _INTERP + r""" )
-    """,
-    re.DOTALL,
+    (?: # an f-string or template literal that carries SQL and a substitution
+        \bf" [^"\n]*? \b(?:SELECT|INSERT|UPDATE|DELETE|WHERE|FROM)\b [^"\n]*? \{
+      | \bf' [^'\n]*? \b(?:SELECT|INSERT|UPDATE|DELETE|WHERE|FROM)\b [^'\n]*? \{
+      | `    [^`]*?   \b(?:SELECT|INSERT|UPDATE|DELETE|WHERE|FROM)\b [^`]*?   \$\{
+      # a SQL string closed, then concatenated with or formatted by a value
+      | ["'] [^"'\n]*? \b(?:SELECT|INSERT|UPDATE|DELETE|WHERE|FROM)\b [^"'\n]*? ["']
+        \s* (?: \+\s*\w | %\s*[\w(] | \.format\s*\( )
+      # the drivers' own escape hatches, unsafe by name
+      | \$queryRawUnsafe\s*\( | \$executeRawUnsafe\s*\( )
+    """
 )
 
 SHELL_INTERP_RE = re.compile(
@@ -1059,6 +1070,9 @@ _CASES_DENY = [
     ("secret in readme", "/x/README.md", 'api_key = "' + _fixture("sk_" + "live_", "51HxxxxxxxxxxAbCdEf") + '"'),
     # Regressions found against real generated code — each of these once slipped through.
     ("sqli beside a safe call", "/x/d.py", 'db.execute("SELECT * FROM logs WHERE id=?", (i,))\ndb.execute(f"SELECT * FROM u WHERE name=\'{name}\'")'),
+    ("sqli by .format", "/x/d.py", 'db.execute("SELECT * FROM u WHERE id={}".format(uid))'),
+    ("sqli via a sql variable", "/x/d.py", 'sql = f"SELECT * FROM logs WHERE user={uid}"\ncur.execute(sql)'),
+    ("sqli in an update", "/x/d.py", 'cur.execute(f"UPDATE users SET role=\'{role}\' WHERE id={uid}")'),
     ("open route beside a user helper", "/x/m.py", '@app.get("/orders")\ndef f(db=Depends(get_db)):\n    return db.query(Order).all()\n\ndef get_user_by_id(uid):\n    return db.query(User).get(uid)'),
     ("cookie explicitly insecure", "/x/m.py", 'response.set_cookie("session", t, httponly=True, secure=False, samesite="lax")'),
     ("real secret fallback", "/x/c.py", 'K = os.environ.get("JWT_SECRET_KEY", "dev-secret-value")'),
@@ -1089,6 +1103,14 @@ _CASES_ALLOW = [
     ("cookie with flags", "/x/m.py", 'response.set_cookie("session", t, httponly=True, secure=True, samesite="lax")'),
     ("webhook verified", "/x/w.py", '@app.post("/webhooks/stripe")\nasync def w(r:Request,sig=Header(alias="Stripe-Signature")):\n    e=stripe.Webhook.constructEvent(await r.body(),sig,S)'),
     ("bound parameters", "/x/d.py", 'db.execute("SELECT * FROM u WHERE id=?", (uid,))'),
+    ("named parameters", "/x/d.py", 'db.execute("SELECT * FROM u WHERE id=:id", {"id": uid})'),
+    ("wholly static query", "/x/d.py", 'n = c.execute("SELECT count(*) FROM conversations").fetchone()'),
+    # strftime('%s', ?) is SQLite's format specifier, not a Python substitution.
+    ("sqlite strftime with a bound value", "/x/d.py", 'q = "SELECT id FROM conversations"\nq += " WHERE started_at >= strftime(\'%s\', ?)"\nc.execute(q, args)'),
+    # The regression that shipped in 0.3.0: an f-string on the *next line* was
+    # read as interpolation inside the query above it.
+    ("sql beside an unrelated f-string", "/x/d.py", 'c.execute("SELECT id, lang FROM conversations WHERE id BETWEEN ? AND ?", (lo, hi))\nprint(f"conv {cid:4d} | {lang}")'),
+    ("like pattern as a bound value", "/x/d.py", 'cur.execute("SELECT * FROM u WHERE name LIKE ?", ("%" + q + "%",))'),
     ("subprocess arg list", "/x/c.py", 'subprocess.run(["convert", n, "o.png"])'),
     ("innerHTML literal", "/x/u.js", 'box.innerHTML = "<b>Hi</b>";'),
     ("sanitised sink", "/x/u.js", 'el.innerHTML = DOMPurify.sanitize(bio)'),

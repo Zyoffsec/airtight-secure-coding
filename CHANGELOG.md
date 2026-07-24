@@ -2,6 +2,29 @@
 
 All notable changes to this skill are recorded here.
 
+## [0.3.1] — 2026-07-24
+
+### Fixed
+
+- **The guard denied correctly written SQL.** Found within a day of release, on a
+  read-only reporting tool whose queries were properly parameterised: a static
+  `SELECT count(*)`, and a `WHERE id BETWEEN ? AND ?` with both values bound. Both were
+  refused.
+
+  The interpolation check scanned a 200-character window after the SQL keyword. That
+  window ran past the end of the statement and picked up the `f"conv {cid} | {lang}"` of
+  an unrelated `print` on the following line, then read it as a substitution inside the
+  query above. `strftime('%s', ?)` tripped it too — SQLite's format specifier read as
+  Python's.
+
+  Every alternative now stays inside a single string literal, so neighbouring code cannot
+  contribute a match. Real injection is unaffected: f-strings, `%`, `+`, `.format()`,
+  template literals, a query built into a variable, and `$queryRawUnsafe` all still deny.
+
+  This is the failure mode that matters most. A guard that blocks correct work does not get
+  argued with — it gets switched off, and then it protects nothing. Eight cases pinning both
+  the false positives and the real injections are now in `--selftest`, which runs 97.
+
 ## [0.3.0] — 2026-07-24
 
 ### Added

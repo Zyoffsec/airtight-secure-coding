@@ -160,7 +160,7 @@ The worst outcome available to a broken guard is a write that passes unchecked.
 python3 hooks/airtight-surface-guard.py --selftest
 ```
 
-79 cases: 40 that must be denied, 39 that must pass untouched. Every false positive and
+97 cases: 48 that must be denied, 49 that must pass untouched. Every false positive and
 every miss ever found against real generated code is pinned here as a case, so a fix that
 resurrects one fails the suite rather than shipping. Run it after any edit to the
 implementation.
