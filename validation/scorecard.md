@@ -1,5 +1,9 @@
 # Scorecard — the full 67-gate audit
 
+> Run against the registry as it stood at 67 gates. Gates 130 to 132 — cross-site request
+> forgery and framing — were added afterwards and are **not scored here**. At least two of
+> them look applicable to these apps; neither build has been re-audited against them.
+
 Every gate in the registry, scored against both committed builds. This is the per-gate protocol behind the number in the main README.
 
 ## Method

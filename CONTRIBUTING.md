@@ -1,9 +1,9 @@
 # Contributing to Airtight
 
-**A topic is one file in `references/vectors/`. You never touch the core to add one.**
+**A topic is one file in `skills/airtight/vectors/`. You never touch the core to add one.**
 
 That is the rule the whole project is built around. A new topic means a new file and a new gate
-range. `SKILL.md` gains one row in its load-trigger table and `references/gates.md` gains one row in
+range. `skills/airtight/SKILL.md` gains one row in its load-trigger table and `skills/airtight/gates.md` gains one row in
 its range table — nothing else moves. Two people writing two topics never touch the same lines, so
 they never conflict, so neither of them needs to wait for the other or for a maintainer to arbitrate.
 
@@ -18,10 +18,10 @@ unclear enough that you have to ask, that is a bug in this file — open an issu
 
 | Contribution | Where it goes | Touches core? |
 | --- | --- | --- |
-| A new gate in an existing topic | that topic's file in `references/vectors/` | no |
-| A new topic (with its gates) | a new file in `references/vectors/` + one row in two tables | one row each |
+| A new gate in an existing topic | that topic's file in `skills/airtight/vectors/` | no |
+| A new topic (with its gates) | a new file in `skills/airtight/vectors/` + one row in two tables | one row each |
 | A better `Fails` example | that topic's file | no |
-| A `prove` probe shape for a range | `references/proof.md` probe table | no |
+| A `prove` probe shape for a range | `skills/airtight/proof.md` probe table | no |
 | Retiring a gate | that topic's file | no |
 
 ## Numbering
@@ -56,9 +56,10 @@ Current allocation, as of the 67 published gates:
 | 100-109 | Logging and monitoring | `vectors/logging.md` | 100, 101, 103, 107 | 102, 104-106, 108, 109 |
 | 110-119 | Vulnerable components | `vectors/dependencies.md` | 110, 112, 114, 115, 117, 118 | 111, 113, 116, 119 |
 | 120-129 | Insecure design | `vectors/design.md` | 120, 121, 123, 125, 127, 128 | 122, 124, 126, 129 |
-| 130+ | — | — | — | **entire range unclaimed** |
+| 130-139 | Cross-site request forgery and framing | `vectors/csrf.md` | 130, 131, 132 | 133-139 |
+| 140+ | — | — | — | **entire range unclaimed** |
 
-Re-check the table in `references/gates.md` before you claim — this one can lag.
+Re-check the table in `skills/airtight/gates.md` before you claim — this one can lag.
 
 ## Claiming a range without colliding
 
@@ -105,7 +106,7 @@ version. No lecture, no history of the vulnerability class.}
 ```
 
 Gate 3 in `vectors/credentials.md` and Gate 22 in `vectors/injection.md` are the reference
-implementations — both are reproduced in `references/gates.md`. Read one before you write yours.
+implementations — both are reproduced in `skills/airtight/gates.md`. Read one before you write yours.
 
 ### Rules for the fields
 
@@ -162,7 +163,7 @@ loses trust the first time it misses.
 
 ## Verification sections are read-only
 
-If your topic contributes a probe shape to `references/proof.md`, the rails are conditions, not
+If your topic contributes a probe shape to `skills/airtight/proof.md`, the rails are conditions, not
 defaults:
 
 - **The developer's own local or development code only.** `localhost`, `127.0.0.1`, `::1`, a local
@@ -203,7 +204,7 @@ satisfy.
 2. Title: `gate: N — short name` or `topic: <name> (range NN-NN)`.
 3. In the body, state which of the five acceptance rules the gate clears, especially rule 5. One line
    each. If you cannot make the case for rule 5, make the case in an issue first.
-4. If you added a topic, confirm the two table rows — `SKILL.md` load-trigger, `references/gates.md`
+4. If you added a topic, confirm the two table rows — `skills/airtight/SKILL.md` load-trigger, `skills/airtight/gates.md`
    range table — are the only core lines you touched.
 
 Style: sober, technical, short. English. No emoji in headings, no badge rows, no marketing language.

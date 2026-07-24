@@ -1,0 +1,21 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "airtight",
+  "description": "Secure-coding gates for AI-written code",
+  "owner": {
+    "name": "Zy"
+  },
+  "plugins": [
+    {
+      "name": "airtight",
+      "description": "Secure-coding gates for AI-written code: 70 numbered gates mapped to OWASP Top 10 and CWE, plus a pre-write guard that stops the write when it can prove the failure.",
+      "version": "0.3.0",
+      "author": {
+        "name": "Zy"
+      },
+      "source": "./",
+      "category": "security",
+      "homepage": "https://github.com/Zyoffsec/airtight-secure-coding"
+    }
+  ]
+}

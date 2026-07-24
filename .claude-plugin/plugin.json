@@ -1,0 +1,9 @@
+{
+  "name": "airtight",
+  "version": "0.3.0",
+  "description": "Secure-coding gates for AI-written code. 70 numbered gates mapped to OWASP Top 10 and CWE, plus a pre-write guard that denies the failures it can prove: open routes, IDOR, missing CSRF tokens, interpolated queries and shell commands, raw HTML sinks, unverified webhooks, any-origin CORS with credentials, passwords under fast hashes, unbounded credential endpoints, and leaked secrets.",
+  "author": {
+    "name": "Zy"
+  },
+  "homepage": "https://github.com/Zyoffsec/airtight-secure-coding"
+}

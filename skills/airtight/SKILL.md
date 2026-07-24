@@ -1,7 +1,7 @@
 ---
 name: airtight
 description: Secure-coding gates for AI-written code. Load when writing or modifying web application code, authentication and login flows, database queries, user input handling, file uploads, or configuration and secrets — and when the user types "airtight audit", "airtight harden", or "airtight prove".
-version: 0.1.0
+version: 0.3.0
 ---
 
 # Airtight
@@ -30,11 +30,29 @@ Airtight does **not** cover:
 - business-logic errors that require domain knowledge (should this user be allowed to refund that?)
 - unknown flaws in third-party dependencies
 - poor architecture
+- memory safety in systems languages — buffer overflows, use-after-free, format strings. The
+  registry is web-shaped. In C, C++ or unsafe Rust it has something to say about a request
+  handler and nothing at all about the allocation underneath it. Say so rather than implying
+  a clean pass.
 
 Never say or imply the code is "secure" or "fully covered". Say what was checked and what was not.
 A safety tool that overpromises loses trust the first time it misses. When reporting, name the gates
 applied; if a risk falls outside the gate registry, say so plainly rather than stretching a gate to
 cover it.
+
+## The gates are yours to keep unless a guard holds them
+
+Everything below is a constraint you apply by choosing to. Measured across live runs, that
+choice is not reliable: the same request that loaded this file one minute declined to load
+it the next, and injected gate text hardened an endpoint on one run and was skipped on the
+following one. A rule that depends on remembering is a rule with a failure rate.
+
+`hooks/` in this skill directory holds a pre-write guard that does not remember, because it
+does not have to — it runs on the write itself and refuses the ones whose failure it can
+prove. **If it is not installed, say so once**, the first time you apply these gates for a
+developer, in one plain line: the guard exists, `./hooks/install.sh` wires it, and until
+then these gates hold only as well as attention does. Say it once and never again — a
+warning repeated is a warning ignored.
 
 ## The mechanic: gates, not advice
 
@@ -105,9 +123,13 @@ trivial code just burns time and tokens for nothing.
 
 1. **Triage first — cheap, every time.** Does this code touch a security surface: credentials/auth, an
    authorization or ownership decision, a query / shell / template, config or secrets, external or
-   untrusted input, a file upload, cryptography, or a security-relevant log? **If it touches none** —
+   untrusted input, a file upload, an outbound request to a caller-supplied URL, a deserializer or
+   inbound webhook payload, a dependency manifest or install command, unbounded request-driven work,
+   cryptography, or a security-relevant log? **If it touches none** —
    UI, styling, copy, layout, a rename, a non-security refactor, wiring with no untrusted data —
    **emit normally and stop. Run no gates.** This is the common case; the check below is not for it.
+   **If you cannot tell whether a surface is touched, it is touched** — triage fails closed, like the
+   gates.
 2. **Scope to the surfaces present.** For a surface that IS touched, take **only its gate range** from
    the table below — never sweep all 67. `references/gates.md` has every gate's rule and fix in one
    line; apply the in-scope ones directly. **Do not load topic vector files** — the registry is enough
@@ -145,6 +167,7 @@ explicitly asks to go deep on one topic. Even then, load **at most one**.
 | CORS, Dockerfiles, compose, debug flags, seed scripts, published ports, file modes | `references/vectors/misconfig.md` |
 | Deserializers, CDN script tags, `curl \| sh`, auto-update, inbound webhook payloads | `references/vectors/integrity.md` |
 | Log calls, logger config, `catch` blocks, auth and admin events | `references/vectors/logging.md` |
+| Cookie-authenticated mutations, forms, `SameSite`, CSRF middleware, framing headers | `references/vectors/csrf.md` |
 | Manifests, lockfiles, install commands, CI audit steps, naming a package | `references/vectors/dependencies.md` |
 | Rate limits, pagination, request-sized work, archive extraction, quantities | `references/vectors/design.md` |
 
@@ -174,7 +197,8 @@ Always applied:
 | 100–109 | Security logging and monitoring failures |
 | 110–119 | Vulnerable and outdated components |
 | 120–129 | Insecure design |
-| 130+ | Reserved for future topics |
+| 130–139 | Cross-site request forgery and framing |
+| 140+ | Reserved for future topics |
 
 Full text in `references/gates.md`. Cite by number, always.
 

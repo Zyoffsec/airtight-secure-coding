@@ -52,3 +52,9 @@ catalog.db
 
 # Backup files from patches/merges
 *.orig
+.gitnexus
+
+# Local code-intelligence tooling, not part of the skill
+AGENTS.md
+.gitnexus/
+.code-review-graph/

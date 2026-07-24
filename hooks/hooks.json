@@ -1,0 +1,17 @@
+{
+  "description": "Airtight surface guard — denies writes whose security failure can be proven mechanically, and asks for the gate registry the first time a session touches a security surface.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/airtight-surface-guard.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
